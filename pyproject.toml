@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kaleido-cli"
+version = "0.1.0"
+description = "CLI for managing RGB Lightning Nodes and interacting with Kaleidoswap"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Kaleidoswap", email = "dev@kaleidoswap.com" }
+]
+keywords = ["bitcoin", "lightning", "rgb", "kaleidoswap", "cli"]
+dependencies = [
+    "kaleidoswap-sdk>=0.5.3",
+    "typer>=0.12",
+    "rich>=13",
+    "shellingham>=1.5",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+kaleido = "kaleido_cli.app:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[project.urls]
+Homepage = "https://kaleidoswap.com"
+Repository = "https://github.com/kaleidoswap/kaleido-sdk"
+
+[tool.hatch.build.targets.wheel]
+packages = ["kaleido_cli"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]

@@ -1,0 +1,48 @@
+# Virtual environment (managed by uv)
+.venv/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Build & distribution
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Installer / pip
+pip-wheel-metadata/
+.pip-caches/
+
+# uv tool installs (editable install artifacts)
+*.dist-info/
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Linters / type checkers
+.ruff_cache/
+.mypy_cache/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
