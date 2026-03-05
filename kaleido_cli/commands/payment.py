@@ -8,7 +8,14 @@ from typing import Annotated, Optional
 import typer
 
 from ..app import get_client
-from ..output import is_json_mode, output_model, print_error, print_json, print_success, print_table
+from ..output import (
+    is_json_mode,
+    output_model,
+    print_error,
+    print_json,
+    print_success,
+    print_table,
+)
 
 payment_app = typer.Typer(
     no_args_is_help=True,
@@ -32,10 +39,33 @@ payment_app = typer.Typer(
     ),
 )
 def payment_invoice(
-    amount_msat: Annotated[Optional[int], typer.Option("--amount-msat", "-a", help="Invoice amount in millisatoshis. Omit for a zero-amount invoice.")] = None,
-    expiry: Annotated[Optional[int], typer.Option("--expiry", "-e", help="Invoice expiry in seconds. Defaults to node setting.")] = None,
-    asset_id: Annotated[Optional[str], typer.Option("--asset-id", help="RGB asset ID to request over Lightning (creates an RGB+LN invoice).")] = None,
-    asset_amount: Annotated[Optional[int], typer.Option("--asset-amount", help="Amount of RGB asset to request.")] = None,
+    amount_msat: Annotated[
+        Optional[int],
+        typer.Option(
+            "--amount-msat",
+            "-a",
+            help="Invoice amount in millisatoshis. Omit for a zero-amount invoice.",
+        ),
+    ] = None,
+    expiry: Annotated[
+        Optional[int],
+        typer.Option(
+            "--expiry",
+            "-e",
+            help="Invoice expiry in seconds. Defaults to node setting.",
+        ),
+    ] = None,
+    asset_id: Annotated[
+        Optional[str],
+        typer.Option(
+            "--asset-id",
+            help="RGB asset ID to request over Lightning (creates an RGB+LN invoice).",
+        ),
+    ] = None,
+    asset_amount: Annotated[
+        Optional[int],
+        typer.Option("--asset-amount", help="Amount of RGB asset to request."),
+    ] = None,
 ) -> None:
     """Create a Lightning invoice (BOLT11)."""
     asyncio.run(_payment_invoice(amount_msat, expiry, asset_id, asset_amount))
@@ -79,7 +109,12 @@ async def _payment_invoice(
 )
 def payment_send(
     invoice: Annotated[str, typer.Argument(help="BOLT11 invoice string to pay.")],
-    amount_msat: Annotated[Optional[int], typer.Option("--amount-msat", help="Amount in msat. Required for zero-amount invoices.")] = None,
+    amount_msat: Annotated[
+        Optional[int],
+        typer.Option(
+            "--amount-msat", help="Amount in msat. Required for zero-amount invoices."
+        ),
+    ] = None,
 ) -> None:
     """Send a Lightning payment."""
     asyncio.run(_payment_send(invoice, amount_msat))
@@ -123,7 +158,9 @@ async def _payment_list() -> None:
             ]
             for p in (resp.payments or [])
         ]
-        print_table("Payments", ["Payment Hash", "Status", "Amount (msat)", "Direction"], rows)
+        print_table(
+            "Payments", ["Payment Hash", "Status", "Amount (msat)", "Direction"], rows
+        )
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
@@ -142,7 +179,9 @@ async def _payment_status(payment_hash: str) -> None:
 
     try:
         client = get_client(require_node=True)
-        resp = await client.rln.get_payment(GetPaymentRequest(payment_hash=payment_hash))
+        resp = await client.rln.get_payment(
+            GetPaymentRequest(payment_hash=payment_hash)
+        )
         if is_json_mode():
             print_json(resp.model_dump())
         else:
@@ -163,7 +202,9 @@ async def _payment_status(payment_hash: str) -> None:
     ),
 )
 def payment_decode(
-    invoice: Annotated[str, typer.Argument(help="BOLT11 or RGB invoice string to inspect.")],
+    invoice: Annotated[
+        str, typer.Argument(help="BOLT11 or RGB invoice string to inspect.")
+    ],
 ) -> None:
     """Decode a Lightning or RGB invoice."""
     asyncio.run(_payment_decode(invoice))
@@ -176,10 +217,14 @@ async def _payment_decode(invoice: str) -> None:
         client = get_client(require_node=True)
         # Try BOLT11 first, then RGB
         try:
-            resp = await client.rln.decode_ln_invoice(DecodeLNInvoiceRequest(invoice=invoice))
+            resp = await client.rln.decode_ln_invoice(
+                DecodeLNInvoiceRequest(invoice=invoice)
+            )
             kind = "Lightning (BOLT11)"
         except Exception:
-            resp = await client.rln.decode_rgb_invoice(DecodeRGBInvoiceRequest(invoice=invoice))
+            resp = await client.rln.decode_rgb_invoice(
+                DecodeRGBInvoiceRequest(invoice=invoice)
+            )
             kind = "RGB Invoice"
 
         if is_json_mode():
@@ -204,7 +249,9 @@ async def _payment_invoice_status(invoice: str) -> None:
 
     try:
         client = get_client(require_node=True)
-        resp = await client.rln.get_invoice_status(InvoiceStatusRequest(invoice=invoice))
+        resp = await client.rln.get_invoice_status(
+            InvoiceStatusRequest(invoice=invoice)
+        )
         if is_json_mode():
             print_json(resp.model_dump())
         else:

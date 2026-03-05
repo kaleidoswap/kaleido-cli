@@ -8,7 +8,14 @@ from typing import Annotated, Optional
 import typer
 
 from ..app import get_client
-from ..output import is_json_mode, output_model, print_error, print_json, print_success, print_table
+from ..output import (
+    is_json_mode,
+    output_model,
+    print_error,
+    print_json,
+    print_success,
+    print_table,
+)
 from kaleidoswap_sdk.rln import (
     BackupRequest,
     CreateUtxosRequest,
@@ -52,7 +59,12 @@ async def _wallet_address() -> None:
     ),
 )
 def wallet_balance(
-    skip_sync: Annotated[bool, typer.Option("--skip-sync", help="Skip blockchain sync and return cached balance.")] = False,
+    skip_sync: Annotated[
+        bool,
+        typer.Option(
+            "--skip-sync", help="Skip blockchain sync and return cached balance."
+        ),
+    ] = False,
 ) -> None:
     """Show BTC wallet balance (vanilla + colored UTXOs)."""
     asyncio.run(_wallet_balance(skip_sync))
@@ -84,7 +96,12 @@ async def _wallet_balance(skip_sync: bool) -> None:
 def wallet_send(
     amount: Annotated[int, typer.Argument(help="Amount to send in satoshis.")],
     address: Annotated[str, typer.Argument(help="Destination Bitcoin address.")],
-    fee_rate: Annotated[Optional[float], typer.Option("--fee-rate", help="Fee rate in sat/vbyte. Uses node default if omitted.")] = None,
+    fee_rate: Annotated[
+        Optional[float],
+        typer.Option(
+            "--fee-rate", help="Fee rate in sat/vbyte. Uses node default if omitted."
+        ),
+    ] = None,
 ) -> None:
     """Send on-chain BTC."""
     asyncio.run(_wallet_send(amount, address, fee_rate))
@@ -147,11 +164,26 @@ async def _wallet_utxos() -> None:
     ),
 )
 def wallet_create_utxos(
-    num: Annotated[Optional[int], typer.Option("--num", "-n", help="Number of UTXOs to create.")] = None,
-    size: Annotated[Optional[int], typer.Option("--size", help="Size of each UTXO in satoshis.")] = None,
-    up_to: Annotated[bool, typer.Option("--up-to", help="If true, num represents total limit instead of count.")] = False,
-    fee_rate: Annotated[Optional[float], typer.Option("--fee-rate", help="On-chain fee rate in sat/vbyte.")] = None,
-    skip_sync: Annotated[bool, typer.Option("--skip-sync", help="Skip blockchain sync before creating UTXOs.")] = False,
+    num: Annotated[
+        Optional[int], typer.Option("--num", "-n", help="Number of UTXOs to create.")
+    ] = None,
+    size: Annotated[
+        Optional[int], typer.Option("--size", help="Size of each UTXO in satoshis.")
+    ] = None,
+    up_to: Annotated[
+        bool,
+        typer.Option(
+            "--up-to", help="If true, num represents total limit instead of count."
+        ),
+    ] = False,
+    fee_rate: Annotated[
+        Optional[float],
+        typer.Option("--fee-rate", help="On-chain fee rate in sat/vbyte."),
+    ] = None,
+    skip_sync: Annotated[
+        bool,
+        typer.Option("--skip-sync", help="Skip blockchain sync before creating UTXOs."),
+    ] = False,
 ) -> None:
     """Create UTXOs for RGB asset operations."""
     asyncio.run(
@@ -227,15 +259,24 @@ async def _wallet_transactions() -> None:
     ),
 )
 def wallet_backup(
-    path: Annotated[str, typer.Argument(help="Destination path for the backup archive.")],
+    path: Annotated[
+        str, typer.Argument(help="Destination path for the backup archive.")
+    ],
     password: Annotated[
         Optional[str],
-        typer.Option("--password", "-p", hide_input=True, help="Backup encryption password. Prompted if omitted."),
+        typer.Option(
+            "--password",
+            "-p",
+            hide_input=True,
+            help="Backup encryption password. Prompted if omitted.",
+        ),
     ] = None,
 ) -> None:
     """Backup node wallet data."""
     if password is None:
-        password = typer.prompt("Backup password", hide_input=True, confirmation_prompt=True)
+        password = typer.prompt(
+            "Backup password", hide_input=True, confirmation_prompt=True
+        )
     asyncio.run(_wallet_backup(path, password))
 
 

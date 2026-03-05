@@ -66,7 +66,9 @@ async def _market_pairs() -> None:
             ]
             for p in (resp.pairs or [])
         ]
-        print_table("Trading Pairs", ["Pair", "Base", "Quote", "Routes", "Active"], rows)
+        print_table(
+            "Trading Pairs", ["Pair", "Base", "Quote", "Routes", "Active"], rows
+        )
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
@@ -87,11 +89,40 @@ async def _market_pairs() -> None:
     ),
 )
 def market_quote(
-    pair: Annotated[str, typer.Argument(help="Trading pair in [green]BASE/QUOTE[/green] format, e.g. [green]BTC/USDT[/green].")],
-    from_amount: Annotated[Optional[int], typer.Option("--from-amount", help="Amount to send (raw units of the base asset). Provide this OR --to-amount.")] = None,
-    to_amount: Annotated[Optional[int], typer.Option("--to-amount", help="Amount to receive (raw units of the quote asset). Provide this OR --from-amount.")] = None,
-    from_layer: Annotated[str, typer.Option("--from-layer", help="Source layer: [green]BTC_LN[/green], [green]RGB_LN[/green], [green]BTC_ONCHAIN[/green].")] = "BTC_LN",
-    to_layer: Annotated[str, typer.Option("--to-layer", help="Destination layer: [green]BTC_LN[/green], [green]RGB_LN[/green], [green]BTC_ONCHAIN[/green].")] = "RGB_LN",
+    pair: Annotated[
+        str,
+        typer.Argument(
+            help="Trading pair in [green]BASE/QUOTE[/green] format, e.g. [green]BTC/USDT[/green]."
+        ),
+    ],
+    from_amount: Annotated[
+        Optional[int],
+        typer.Option(
+            "--from-amount",
+            help="Amount to send (raw units of the base asset). Provide this OR --to-amount.",
+        ),
+    ] = None,
+    to_amount: Annotated[
+        Optional[int],
+        typer.Option(
+            "--to-amount",
+            help="Amount to receive (raw units of the quote asset). Provide this OR --from-amount.",
+        ),
+    ] = None,
+    from_layer: Annotated[
+        str,
+        typer.Option(
+            "--from-layer",
+            help="Source layer: [green]BTC_LN[/green], [green]RGB_LN[/green], [green]BTC_ONCHAIN[/green].",
+        ),
+    ] = "BTC_LN",
+    to_layer: Annotated[
+        str,
+        typer.Option(
+            "--to-layer",
+            help="Destination layer: [green]BTC_LN[/green], [green]RGB_LN[/green], [green]BTC_ONCHAIN[/green].",
+        ),
+    ] = "RGB_LN",
 ) -> None:
     """Get a swap quote for a trading pair."""
     if from_amount is None and to_amount is None:
@@ -101,7 +132,11 @@ def market_quote(
 
 
 async def _market_quote(
-    pair: str, from_amount: int | None, to_amount: int | None, from_layer: str, to_layer: str
+    pair: str,
+    from_amount: int | None,
+    to_amount: int | None,
+    from_layer: str,
+    to_layer: str,
 ) -> None:
     from kaleidoswap_sdk import Layer, PairQuoteRequest, SwapLegInput
 
@@ -109,11 +144,17 @@ async def _market_quote(
         client = get_client()
         pairs = await client.maker.list_pairs()
         matched = next(
-            (p for p in (pairs.pairs or []) if f"{p.base.ticker}/{p.quote.ticker}" == pair.upper()),
+            (
+                p
+                for p in (pairs.pairs or [])
+                if f"{p.base.ticker}/{p.quote.ticker}" == pair.upper()
+            ),
             None,
         )
         if not matched:
-            print_error(f"Pair {pair!r} not found. Use 'kaleido market pairs' to list available pairs.")
+            print_error(
+                f"Pair {pair!r} not found. Use 'kaleido market pairs' to list available pairs."
+            )
             raise typer.Exit(1)
 
         body = PairQuoteRequest(

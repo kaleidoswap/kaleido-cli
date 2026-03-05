@@ -47,7 +47,10 @@ async def _peer_list() -> None:
     ),
 )
 def peer_connect(
-    peer: Annotated[str, typer.Argument(help="Peer address in [green]pubkey@host:port[/green] format.")],
+    peer: Annotated[
+        str,
+        typer.Argument(help="Peer address in [green]pubkey@host:port[/green] format."),
+    ],
 ) -> None:
     """Connect to a peer."""
     asyncio.run(_peer_connect(peer))
@@ -70,7 +73,9 @@ async def _peer_connect(peer: str) -> None:
     epilog="  [cyan]kaleido peer disconnect 03abc...def[/cyan]   Use 'kaleido peer list' to find pubkeys.",
 )
 def peer_disconnect(
-    pubkey: Annotated[str, typer.Argument(help="Full pubkey of the peer to disconnect.")],
+    pubkey: Annotated[
+        str, typer.Argument(help="Full pubkey of the peer to disconnect.")
+    ],
 ) -> None:
     """Disconnect from a peer."""
     asyncio.run(_peer_disconnect(pubkey))

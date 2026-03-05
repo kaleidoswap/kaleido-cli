@@ -8,7 +8,15 @@ from typing import Annotated, Optional
 import typer
 
 from ..app import get_client
-from ..output import is_json_mode, output_model, print_error, print_info, print_json, print_success, print_table
+from ..output import (
+    is_json_mode,
+    output_model,
+    print_error,
+    print_info,
+    print_json,
+    print_success,
+    print_table,
+)
 
 swap_app = typer.Typer(
     no_args_is_help=True,
@@ -29,11 +37,36 @@ swap_app = typer.Typer(
     ),
 )
 def swap_quote(
-    pair: Annotated[str, typer.Argument(help="Trading pair in [green]BASE/QUOTE[/green] format, e.g. [green]BTC/USDT[/green].")],
-    from_amount: Annotated[Optional[int], typer.Option("--from-amount", help="Amount to send (raw units). Provide this OR --to-amount.")] = None,
-    to_amount: Annotated[Optional[int], typer.Option("--to-amount", help="Amount to receive (raw units). Provide this OR --from-amount.")] = None,
-    from_layer: Annotated[str, typer.Option("--from-layer", help="Source layer: BTC_LN, RGB_LN, BTC_ONCHAIN.")] = "BTC_LN",
-    to_layer: Annotated[str, typer.Option("--to-layer", help="Destination layer: BTC_LN, RGB_LN, BTC_ONCHAIN.")] = "RGB_LN",
+    pair: Annotated[
+        str,
+        typer.Argument(
+            help="Trading pair in [green]BASE/QUOTE[/green] format, e.g. [green]BTC/USDT[/green]."
+        ),
+    ],
+    from_amount: Annotated[
+        Optional[int],
+        typer.Option(
+            "--from-amount",
+            help="Amount to send (raw units). Provide this OR --to-amount.",
+        ),
+    ] = None,
+    to_amount: Annotated[
+        Optional[int],
+        typer.Option(
+            "--to-amount",
+            help="Amount to receive (raw units). Provide this OR --from-amount.",
+        ),
+    ] = None,
+    from_layer: Annotated[
+        str,
+        typer.Option("--from-layer", help="Source layer: BTC_LN, RGB_LN, BTC_ONCHAIN."),
+    ] = "BTC_LN",
+    to_layer: Annotated[
+        str,
+        typer.Option(
+            "--to-layer", help="Destination layer: BTC_LN, RGB_LN, BTC_ONCHAIN."
+        ),
+    ] = "RGB_LN",
 ) -> None:
     """Get a swap quote (alias for 'kaleido market quote')."""
     if from_amount is None and to_amount is None:
@@ -43,7 +76,11 @@ def swap_quote(
 
 
 async def _swap_quote(
-    pair: str, from_amount: int | None, to_amount: int | None, from_layer: str, to_layer: str
+    pair: str,
+    from_amount: int | None,
+    to_amount: int | None,
+    from_layer: str,
+    to_layer: str,
 ) -> None:
     from kaleidoswap_sdk import Layer, PairQuoteRequest, SwapLegInput
 
@@ -51,7 +88,11 @@ async def _swap_quote(
         client = get_client()
         pairs = await client.maker.list_pairs()
         matched = next(
-            (p for p in (pairs.pairs or []) if f"{p.base.ticker}/{p.quote.ticker}" == pair.upper()),
+            (
+                p
+                for p in (pairs.pairs or [])
+                if f"{p.base.ticker}/{p.quote.ticker}" == pair.upper()
+            ),
             None,
         )
         if not matched:
@@ -59,8 +100,14 @@ async def _swap_quote(
             raise typer.Exit(1)
 
         body = PairQuoteRequest(
-            from_asset=SwapLegInput(asset_id=matched.base.ticker, layer=Layer(from_layer), amount=from_amount),
-            to_asset=SwapLegInput(asset_id=matched.quote.ticker, layer=Layer(to_layer), amount=to_amount),
+            from_asset=SwapLegInput(
+                asset_id=matched.base.ticker,
+                layer=Layer(from_layer),
+                amount=from_amount,
+            ),
+            to_asset=SwapLegInput(
+                asset_id=matched.quote.ticker, layer=Layer(to_layer), amount=to_amount
+            ),
         )
         quote = await client.maker.get_quote(body)
 
@@ -89,8 +136,15 @@ async def _swap_quote(
     ),
 )
 def swap_history(
-    status: Annotated[Optional[str], typer.Option("--status", help="Filter by status: PENDING, FILLED, FAILED, EXPIRED.")] = None,
-    limit: Annotated[int, typer.Option("--limit", help="Maximum number of results to return.")] = 20,
+    status: Annotated[
+        Optional[str],
+        typer.Option(
+            "--status", help="Filter by status: PENDING, FILLED, FAILED, EXPIRED."
+        ),
+    ] = None,
+    limit: Annotated[
+        int, typer.Option("--limit", help="Maximum number of results to return.")
+    ] = 20,
 ) -> None:
     """Show swap order history."""
     asyncio.run(_swap_history(status, limit))
@@ -113,7 +167,9 @@ async def _swap_history(status: str | None, limit: int) -> None:
             ]
             for o in (resp.data or [])
         ]
-        print_table("Swap History", ["Order ID", "Status", "From", "To", "Created At"], rows)
+        print_table(
+            "Swap History", ["Order ID", "Status", "From", "To", "Created At"], rows
+        )
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
@@ -135,7 +191,9 @@ async def _swap_status(order_id: str) -> None:
 
     try:
         client = get_client()
-        resp = await client.maker.get_swap_order_status(SwapOrderStatusRequest(order_id=order_id))
+        resp = await client.maker.get_swap_order_status(
+            SwapOrderStatusRequest(order_id=order_id)
+        )
         if is_json_mode():
             print_json(resp.model_dump())
         else:
@@ -159,10 +217,22 @@ async def _swap_node_list() -> None:
             print_json(resp.model_dump())
             return
         rows = []
-        for swap in (resp.taker or []):
-            rows.append([swap.payment_hash[:16] + "…" if swap.payment_hash else "-", "taker", swap.status])
-        for swap in (resp.maker or []):
-            rows.append([swap.payment_hash[:16] + "…" if swap.payment_hash else "-", "maker", swap.status])
+        for swap in resp.taker or []:
+            rows.append(
+                [
+                    swap.payment_hash[:16] + "…" if swap.payment_hash else "-",
+                    "taker",
+                    swap.status,
+                ]
+            )
+        for swap in resp.maker or []:
+            rows.append(
+                [
+                    swap.payment_hash[:16] + "…" if swap.payment_hash else "-",
+                    "maker",
+                    swap.status,
+                ]
+            )
         print_table("Node Swaps", ["Payment Hash", "Role", "Status"], rows)
     except Exception as e:
         print_error(f"Error: {e}")

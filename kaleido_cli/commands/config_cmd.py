@@ -6,8 +6,22 @@ from typing import Annotated
 
 import typer
 
-from ..config import CONFIG_FILE, CliConfig, load_config, save_config, set_config_key, _KEY_ALIASES
-from ..output import is_json_mode, print_error, print_info, print_json, print_success, print_table
+from ..config import (
+    CONFIG_FILE,
+    CliConfig,
+    load_config,
+    save_config,
+    set_config_key,
+    _KEY_ALIASES,
+)
+from ..output import (
+    is_json_mode,
+    print_error,
+    print_info,
+    print_json,
+    print_success,
+    print_table,
+)
 
 config_app = typer.Typer(
     no_args_is_help=True,
@@ -50,7 +64,10 @@ def config_show() -> None:
     ),
 )
 def config_set(
-    key: Annotated[str, typer.Argument(help=f"Config key to update. Valid keys: {list(_KEY_ALIASES)}")],
+    key: Annotated[
+        str,
+        typer.Argument(help=f"Config key to update. Valid keys: {list(_KEY_ALIASES)}"),
+    ],
     value: Annotated[str, typer.Argument(help="New value to set.")],
 ) -> None:
     """Set a configuration value."""
@@ -70,7 +87,9 @@ def config_set(
     ),
 )
 def config_reset(
-    yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip the confirmation prompt.")] = False,
+    yes: Annotated[
+        bool, typer.Option("--yes", "-y", help="Skip the confirmation prompt.")
+    ] = False,
 ) -> None:
     """Reset all configuration to defaults."""
     if not yes:

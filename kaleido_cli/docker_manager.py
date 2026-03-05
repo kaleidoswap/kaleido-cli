@@ -34,9 +34,7 @@ def list_spawn_names(base_dir: Path) -> list[str]:
     if not base_dir.exists():
         return []
     return sorted(
-        d.name
-        for d in base_dir.iterdir()
-        if d.is_dir() and (d / COMPOSE_FILE).exists()
+        d.name for d in base_dir.iterdir() if d.is_dir() and (d / COMPOSE_FILE).exists()
     )
 
 
@@ -136,9 +134,7 @@ class DockerManager:
             if stream:
                 result = subprocess.run(cmd, cwd=self.compose_dir)
             else:
-                result = subprocess.run(
-                    cmd, cwd=self.compose_dir, capture_output=False
-                )
+                result = subprocess.run(cmd, cwd=self.compose_dir, capture_output=False)
             return result.returncode
         except KeyboardInterrupt:
             return 0
@@ -291,7 +287,12 @@ class SpawnManager(DockerManager):
                     "DAEMON_PORT": daemon_port,
                 },
                 "healthcheck": {
-                    "test": ["CMD", "curl", "-f", f"http://localhost:{daemon_port}/nodeinfo"],
+                    "test": [
+                        "CMD",
+                        "curl",
+                        "-f",
+                        f"http://localhost:{daemon_port}/nodeinfo",
+                    ],
                     "interval": "10s",
                     "timeout": "10s",
                     "retries": 3,
