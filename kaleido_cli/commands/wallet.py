@@ -17,8 +17,16 @@ from ..output import (
     print_table,
 )
 from kaleidoswap_sdk.rln import (
+    AddressResponse,
     BackupRequest,
+    BtcBalanceResponse,
     CreateUtxosRequest,
+    ListTransactionsRequest,
+    ListTransactionsResponse,
+    ListUnspentsRequest,
+    ListUnspentsResponse,
+    SendBtcRequest,
+    SendBtcResponse,
 )
 
 wallet_app = typer.Typer(
@@ -40,7 +48,7 @@ def wallet_address() -> None:
 async def _wallet_address() -> None:
     try:
         client = get_client(require_node=True)
-        resp = await client.rln.get_address()
+        resp: AddressResponse = await client.rln.get_address()
         if is_json_mode():
             print_json(resp.model_dump())
         else:
@@ -73,7 +81,7 @@ def wallet_balance(
 async def _wallet_balance(skip_sync: bool) -> None:
     try:
         client = get_client(require_node=True)
-        resp = await client.rln.get_btc_balance(skip_sync=skip_sync)
+        resp: BtcBalanceResponse = await client.rln.get_btc_balance(skip_sync=skip_sync)
         if is_json_mode():
             print_json(resp.model_dump())
             return
@@ -90,7 +98,9 @@ async def _wallet_balance(skip_sync: bool) -> None:
         "  Send 50 000 sats at default fee rate:\n"
         "  [cyan]kaleido wallet send 50000 bc1q...[/cyan]\n\n"
         "  Send with a specific fee rate:\n"
-        "  [cyan]kaleido wallet send 50000 bc1q... --fee-rate 5.0[/cyan]"
+        "  [cyan]kaleido wallet send 50000 bc1q... --fee-rate 5.0[/cyan]\n\n"
+        "  Skip blockchain sync before sending:\n"
+        "  [cyan]kaleido wallet send 50000 bc1q... --skip-sync[/cyan]"
     ),
 )
 def wallet_send(
@@ -102,18 +112,22 @@ def wallet_send(
             "--fee-rate", help="Fee rate in sat/vbyte. Uses node default if omitted."
         ),
     ] = None,
+    skip_sync: Annotated[
+        bool,
+        typer.Option(
+            "--skip-sync", help="Skip blockchain sync before sending."
+        ),
+    ] = False,
 ) -> None:
     """Send on-chain BTC."""
-    asyncio.run(_wallet_send(amount, address, fee_rate))
+    asyncio.run(_wallet_send(amount, address, fee_rate, skip_sync))
 
 
-async def _wallet_send(amount: int, address: str, fee_rate: float | None) -> None:
-    from kaleidoswap_sdk.rln import SendBtcRequest
-
+async def _wallet_send(amount: int, address: str, fee_rate: float | None, skip_sync: bool) -> None:
     try:
         client = get_client(require_node=True)
-        body = SendBtcRequest(amount=amount, address=address, fee_rate=fee_rate)
-        resp = await client.rln.send_btc(body)
+        body = SendBtcRequest(amount=amount, address=address, fee_rate=fee_rate, skip_sync=skip_sync)
+        resp: SendBtcResponse = await client.rln.send_btc(body)
         if is_json_mode():
             print_json(resp.model_dump())
         else:
@@ -123,16 +137,32 @@ async def _wallet_send(amount: int, address: str, fee_rate: float | None) -> Non
         raise typer.Exit(1)
 
 
-@wallet_app.command("utxos")
-def wallet_utxos() -> None:
+@wallet_app.command(
+    "utxos",
+    epilog=(
+        "[bold]Examples[/bold]\n\n"
+        "  [cyan]kaleido wallet utxos[/cyan]              List UTXOs (syncs first)\n"
+        "  [cyan]kaleido wallet utxos --skip-sync[/cyan]  Use cached UTXO data (faster)"
+    ),
+)
+def wallet_utxos(
+    skip_sync: Annotated[
+        bool,
+        typer.Option(
+            "--skip-sync", help="Skip blockchain sync and return cached UTXOs."
+        ),
+    ] = False,
+) -> None:
     """List unspent transaction outputs."""
-    asyncio.run(_wallet_utxos())
+    asyncio.run(_wallet_utxos(skip_sync))
 
 
-async def _wallet_utxos() -> None:
+async def _wallet_utxos(skip_sync: bool) -> None:
     try:
         client = get_client(require_node=True)
-        resp = await client.rln.list_unspents()
+        resp: ListUnspentsResponse = await client.rln.list_unspents(
+            ListUnspentsRequest(skip_sync=skip_sync)
+        )
         if is_json_mode():
             print_json(resp.model_dump())
             return
@@ -221,16 +251,32 @@ async def _wallet_create_utxos(
         raise typer.Exit(1)
 
 
-@wallet_app.command("transactions")
-def wallet_transactions() -> None:
+@wallet_app.command(
+    "transactions",
+    epilog=(
+        "[bold]Examples[/bold]\n\n"
+        "  [cyan]kaleido wallet transactions[/cyan]              Full transaction list (syncs first)\n"
+        "  [cyan]kaleido wallet transactions --skip-sync[/cyan]  Use cached transactions (faster)"
+    ),
+)
+def wallet_transactions(
+    skip_sync: Annotated[
+        bool,
+        typer.Option(
+            "--skip-sync", help="Skip blockchain sync and return cached transactions."
+        ),
+    ] = False,
+) -> None:
     """List on-chain transactions."""
-    asyncio.run(_wallet_transactions())
+    asyncio.run(_wallet_transactions(skip_sync))
 
 
-async def _wallet_transactions() -> None:
+async def _wallet_transactions(skip_sync: bool) -> None:
     try:
         client = get_client(require_node=True)
-        resp = await client.rln.list_transactions()
+        resp: ListTransactionsResponse = await client.rln.list_transactions(
+            ListTransactionsRequest(skip_sync=skip_sync)
+        )
         if is_json_mode():
             print_json(resp.model_dump())
             return
@@ -281,8 +327,6 @@ def wallet_backup(
 
 
 async def _wallet_backup(path: str, password: str) -> None:
-    from kaleidoswap_sdk.rln import BackupRequest
-
     try:
         client = get_client(require_node=True)
         await client.rln.backup(BackupRequest(backup_path=path, password=password))

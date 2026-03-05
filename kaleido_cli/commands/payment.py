@@ -16,6 +16,21 @@ from ..output import (
     print_success,
     print_table,
 )
+from kaleidoswap_sdk.rln import (
+    DecodeLNInvoiceRequest,
+    DecodeLNInvoiceResponse,
+    DecodeRGBInvoiceRequest,
+    DecodeRGBInvoiceResponse,
+    GetPaymentRequest,
+    GetPaymentResponse,
+    InvoiceStatusRequest,
+    InvoiceStatusResponse,
+    LNInvoiceRequest,
+    LNInvoiceResponse,
+    ListPaymentsResponse,
+    SendPaymentRequest,
+    SendPaymentResponse,
+)
 
 payment_app = typer.Typer(
     no_args_is_help=True,
@@ -77,8 +92,6 @@ async def _payment_invoice(
     asset_id: str | None,
     asset_amount: int | None,
 ) -> None:
-    from kaleidoswap_sdk.rln import LNInvoiceRequest
-
     try:
         client = get_client(require_node=True)
         body = LNInvoiceRequest(
@@ -87,7 +100,7 @@ async def _payment_invoice(
             asset_id=asset_id,
             asset_amount=asset_amount,
         )
-        resp = await client.rln.create_ln_invoice(body)
+        resp: LNInvoiceResponse = await client.rln.create_ln_invoice(body)
         if is_json_mode():
             print_json(resp.model_dump())
         else:
@@ -121,12 +134,10 @@ def payment_send(
 
 
 async def _payment_send(invoice: str, amount_msat: int | None) -> None:
-    from kaleidoswap_sdk.rln import SendPaymentRequest
-
     try:
         client = get_client(require_node=True)
         body = SendPaymentRequest(invoice=invoice, amount_msat=amount_msat)
-        resp = await client.rln.send_payment(body)
+        resp: SendPaymentResponse = await client.rln.send_payment(body)
         if is_json_mode():
             print_json(resp.model_dump())
         else:
@@ -145,7 +156,7 @@ def payment_list() -> None:
 async def _payment_list() -> None:
     try:
         client = get_client(require_node=True)
-        resp = await client.rln.list_payments()
+        resp: ListPaymentsResponse = await client.rln.list_payments()
         if is_json_mode():
             print_json(resp.model_dump())
             return
@@ -175,11 +186,9 @@ def payment_status(
 
 
 async def _payment_status(payment_hash: str) -> None:
-    from kaleidoswap_sdk.rln import GetPaymentRequest
-
     try:
         client = get_client(require_node=True)
-        resp = await client.rln.get_payment(
+        resp: GetPaymentResponse = await client.rln.get_payment(
             GetPaymentRequest(payment_hash=payment_hash)
         )
         if is_json_mode():
@@ -211,18 +220,16 @@ def payment_decode(
 
 
 async def _payment_decode(invoice: str) -> None:
-    from kaleidoswap_sdk.rln import DecodeLNInvoiceRequest, DecodeRGBInvoiceRequest
-
     try:
         client = get_client(require_node=True)
         # Try BOLT11 first, then RGB
         try:
-            resp = await client.rln.decode_ln_invoice(
+            resp: DecodeLNInvoiceResponse = await client.rln.decode_ln_invoice(
                 DecodeLNInvoiceRequest(invoice=invoice)
             )
             kind = "Lightning (BOLT11)"
         except Exception:
-            resp = await client.rln.decode_rgb_invoice(
+            resp: DecodeRGBInvoiceResponse = await client.rln.decode_rgb_invoice(
                 DecodeRGBInvoiceRequest(invoice=invoice)
             )
             kind = "RGB Invoice"
@@ -245,11 +252,9 @@ def payment_invoice_status(
 
 
 async def _payment_invoice_status(invoice: str) -> None:
-    from kaleidoswap_sdk.rln import InvoiceStatusRequest
-
     try:
         client = get_client(require_node=True)
-        resp = await client.rln.get_invoice_status(
+        resp: InvoiceStatusResponse = await client.rln.get_invoice_status(
             InvoiceStatusRequest(invoice=invoice)
         )
         if is_json_mode():

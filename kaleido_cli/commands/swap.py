@@ -17,6 +17,17 @@ from ..output import (
     print_success,
     print_table,
 )
+from kaleidoswap_sdk import (
+    Layer,
+    OrderHistoryResponse,
+    PairQuoteRequest,
+    PairQuoteResponse,
+    SwapLegInput,
+    SwapOrderStatusRequest,
+    SwapOrderStatusResponse,
+    TradingPairsResponse,
+)
+from kaleidoswap_sdk.rln import ListSwapsResponse
 
 swap_app = typer.Typer(
     no_args_is_help=True,
@@ -82,11 +93,9 @@ async def _swap_quote(
     from_layer: str,
     to_layer: str,
 ) -> None:
-    from kaleidoswap_sdk import Layer, PairQuoteRequest, SwapLegInput
-
     try:
         client = get_client()
-        pairs = await client.maker.list_pairs()
+        pairs: TradingPairsResponse = await client.maker.list_pairs()
         matched = next(
             (
                 p
@@ -109,7 +118,7 @@ async def _swap_quote(
                 asset_id=matched.quote.ticker, layer=Layer(to_layer), amount=to_amount
             ),
         )
-        quote = await client.maker.get_quote(body)
+        quote: PairQuoteResponse = await client.maker.get_quote(body)
 
         if is_json_mode():
             print_json(quote.model_dump())
@@ -153,7 +162,7 @@ def swap_history(
 async def _swap_history(status: str | None, limit: int) -> None:
     try:
         client = get_client()
-        resp = await client.maker.get_order_history(status=status, limit=limit)
+        resp: OrderHistoryResponse = await client.maker.get_order_history(status=status, limit=limit)
         if is_json_mode():
             print_json(resp.model_dump())
             return
@@ -187,11 +196,9 @@ def swap_status(
 
 
 async def _swap_status(order_id: str) -> None:
-    from kaleidoswap_sdk import SwapOrderStatusRequest
-
     try:
         client = get_client()
-        resp = await client.maker.get_swap_order_status(
+        resp: SwapOrderStatusResponse = await client.maker.get_swap_order_status(
             SwapOrderStatusRequest(order_id=order_id)
         )
         if is_json_mode():
@@ -212,7 +219,7 @@ def swap_node_list() -> None:
 async def _swap_node_list() -> None:
     try:
         client = get_client(require_node=True)
-        resp = await client.rln.list_swaps()
+        resp: ListSwapsResponse = await client.rln.list_swaps()
         if is_json_mode():
             print_json(resp.model_dump())
             return

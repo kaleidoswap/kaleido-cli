@@ -14,7 +14,6 @@ from ..docker_manager import (
     DEFAULT_BASE_PEER_PORT,
     DEFAULT_SPAWN_DIR,
     DockerManager,
-    InfraConfig,
     SpawnConfig,
     SpawnManager,
     list_spawn_names,
@@ -27,7 +26,7 @@ node_app = typer.Typer(
     help=(
         "Manage named RGB Lightning Node environments via Docker.\n\n"
         "[bold]Creating an environment:[/bold]\n"
-        "  [cyan]kaleido node create[/cyan]          — wizard: configure ports, network, infra\n\n"
+        "  [cyan]kaleido node create[/cyan]          — wizard: configure ports, network\n\n"
         "[bold]Managing environments:[/bold]\n"
         "  [cyan]kaleido node list[/cyan]             — list all environments with their node URLs\n"
         "  [cyan]kaleido node up    <name>[/cyan]     — start containers\n"
@@ -151,36 +150,6 @@ def node_create(
         "  Bitcoin network", default=state.config.network or "regtest"
     )
 
-    # ── Full infra stack ─────────────────────────────────────────────────────
-    with_infra = typer.confirm(
-        "  Include full infra stack (bitcoind + electrs + RGB proxy)?",
-        default=False,
-    )
-
-    infra = InfraConfig()
-    if with_infra:
-        print_info("  ── bitcoind ──────────────────────────────────────────")
-        infra.btc_rpc_user = typer.prompt("  RPC username", default="kaleido")
-        raw_pass = typer.prompt(
-            "  RPC password (leave blank to auto-generate)",
-            default="",
-            hide_input=True,
-        )
-        if raw_pass:
-            infra.btc_rpc_pass = raw_pass
-        else:
-            infra.btc_rpc_pass = _os.urandom(16).hex()
-            print_info(f"  Generated RPC password: [bold]{infra.btc_rpc_pass}[/bold]")
-        infra.bitcoind_rpc_port = typer.prompt(
-            "  bitcoind RPC port", default=18443, type=int
-        )
-
-        print_info("  ── electrs ───────────────────────────────────────────")
-        infra.electrs_port = typer.prompt("  electrs port", default=50001, type=int)
-
-        print_info("  ── RGB proxy ─────────────────────────────────────────")
-        infra.proxy_port = typer.prompt("  RGB proxy port", default=3000, type=int)
-
     # ── Node ports ───────────────────────────────────────────────────────────
     print_info("  ── Node ports ────────────────────────────────────────")
     end_d = DEFAULT_BASE_DAEMON_PORT + count - 1
@@ -217,8 +186,6 @@ def node_create(
         disable_authentication=True,
         base_daemon_port=daemon_base,
         base_peer_port=peer_base,
-        with_infra=with_infra,
-        infra=infra,
         spawn_base_dir=str(base),
     )
 
@@ -410,7 +377,6 @@ def node_ps(
         "  Stream all logs:\n"
         "  [cyan]kaleido node logs default[/cyan]\n\n"
         "  Stream logs for one service:\n"
-        "  [cyan]kaleido node logs default --service bitcoind[/cyan]\n"
         "  [cyan]kaleido node logs myenv --service rgb_node_1[/cyan]\n\n"
         "  Print and exit:\n"
         "  [cyan]kaleido node logs default --no-follow[/cyan]"
@@ -426,7 +392,7 @@ def node_logs(
         typer.Option(
             "--service",
             "-s",
-            help="Filter to a specific service (e.g. bitcoind, rgb_node_1).",
+            help="Filter to a specific service (e.g. rgb_node_1, rgb_node_2).",
         ),
     ] = None,
     no_follow: Annotated[

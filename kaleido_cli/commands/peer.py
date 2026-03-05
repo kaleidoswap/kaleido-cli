@@ -9,6 +9,11 @@ import typer
 
 from ..app import get_client
 from ..output import is_json_mode, print_error, print_json, print_success, print_table
+from kaleidoswap_sdk.rln import (
+    ConnectPeerRequest,
+    DisconnectPeerRequest,
+    ListPeersResponse,
+)
 
 peer_app = typer.Typer(
     no_args_is_help=True,
@@ -26,7 +31,7 @@ def peer_list() -> None:
 async def _peer_list() -> None:
     try:
         client = get_client(require_node=True)
-        resp = await client.rln.list_peers()
+        resp: ListPeersResponse = await client.rln.list_peers()
         if is_json_mode():
             print_json(resp.model_dump())
             return
@@ -57,8 +62,6 @@ def peer_connect(
 
 
 async def _peer_connect(peer: str) -> None:
-    from kaleidoswap_sdk.rln import ConnectPeerRequest
-
     try:
         client = get_client(require_node=True)
         await client.rln.connect_peer(ConnectPeerRequest(peer_pubkey_and_addr=peer))
@@ -82,8 +85,6 @@ def peer_disconnect(
 
 
 async def _peer_disconnect(pubkey: str) -> None:
-    from kaleidoswap_sdk.rln import DisconnectPeerRequest
-
     try:
         client = get_client(require_node=True)
         await client.rln.disconnect_peer(DisconnectPeerRequest(pubkey=pubkey))
