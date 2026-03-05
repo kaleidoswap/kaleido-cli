@@ -409,12 +409,8 @@ async def _channel_order_get(order_id: str) -> None:
 )
 def channel_order_decide(
     order_id: Annotated[str, typer.Argument(help="LSP order ID.")],
-    accept: Annotated[
-        bool, typer.Option("--accept", help="Accept the order.")
-    ] = False,
-    reject: Annotated[
-        bool, typer.Option("--reject", help="Reject the order.")
-    ] = False,
+    accept: Annotated[bool, typer.Option("--accept", help="Accept the order.")] = False,
+    reject: Annotated[bool, typer.Option("--reject", help="Reject the order.")] = False,
 ) -> None:
     """Submit a rate decision for an LSP channel order."""
     if accept == reject:
@@ -515,4 +511,3 @@ async def _channel_estimate_fees(
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
-

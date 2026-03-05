@@ -162,7 +162,9 @@ def swap_history(
 async def _swap_history(status: str | None, limit: int) -> None:
     try:
         client = get_client()
-        resp: OrderHistoryResponse = await client.maker.get_order_history(status=status, limit=limit)
+        resp: OrderHistoryResponse = await client.maker.get_order_history(
+            status=status, limit=limit
+        )
         if is_json_mode():
             print_json(resp.model_dump())
             return

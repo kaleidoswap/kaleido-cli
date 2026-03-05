@@ -114,19 +114,21 @@ def wallet_send(
     ] = None,
     skip_sync: Annotated[
         bool,
-        typer.Option(
-            "--skip-sync", help="Skip blockchain sync before sending."
-        ),
+        typer.Option("--skip-sync", help="Skip blockchain sync before sending."),
     ] = False,
 ) -> None:
     """Send on-chain BTC."""
     asyncio.run(_wallet_send(amount, address, fee_rate, skip_sync))
 
 
-async def _wallet_send(amount: int, address: str, fee_rate: float | None, skip_sync: bool) -> None:
+async def _wallet_send(
+    amount: int, address: str, fee_rate: float | None, skip_sync: bool
+) -> None:
     try:
         client = get_client(require_node=True)
-        body = SendBtcRequest(amount=amount, address=address, fee_rate=fee_rate, skip_sync=skip_sync)
+        body = SendBtcRequest(
+            amount=amount, address=address, fee_rate=fee_rate, skip_sync=skip_sync
+        )
         resp: SendBtcResponse = await client.rln.send_btc(body)
         if is_json_mode():
             print_json(resp.model_dump())

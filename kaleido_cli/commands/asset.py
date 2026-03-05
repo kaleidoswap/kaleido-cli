@@ -290,7 +290,9 @@ def asset_invoice(
     ] = None,
 ) -> None:
     """Create an RGB invoice to receive assets."""
-    asyncio.run(_asset_invoice(asset_id, amount, min_confirmations, duration_seconds, witness))
+    asyncio.run(
+        _asset_invoice(asset_id, amount, min_confirmations, duration_seconds, witness)
+    )
 
 
 async def _asset_invoice(
@@ -372,7 +374,11 @@ def asset_send(
     ] = False,
 ) -> None:
     """Send RGB assets to an invoice."""
-    asyncio.run(_asset_send(asset_id, amount, invoice, fee_rate, min_confirmations, donation, skip_sync))
+    asyncio.run(
+        _asset_send(
+            asset_id, amount, invoice, fee_rate, min_confirmations, donation, skip_sync
+        )
+    )
 
 
 async def _asset_send(
@@ -435,7 +441,9 @@ async def _asset_send(
     ),
 )
 def asset_send_batch(
-    json_file: Annotated[str, typer.Argument(help="Path to JSON file with batch transfer data.")],
+    json_file: Annotated[
+        str, typer.Argument(help="Path to JSON file with batch transfer data.")
+    ],
 ) -> None:
     """Send RGB assets to multiple recipients in a single transaction."""
     asyncio.run(_asset_send_batch(json_file))
@@ -464,8 +472,7 @@ async def _asset_send_batch(json_file: str) -> None:
                 assignment_data = r["assignment"]
                 if assignment_data["type"] == "Fungible":
                     assignment = AssignmentFungible(
-                        type="Fungible",
-                        value=assignment_data["value"]
+                        type="Fungible", value=assignment_data["value"]
                     )
                 else:
                     # Handle other assignment types if needed
@@ -491,8 +498,12 @@ async def _asset_send_batch(json_file: str) -> None:
         if is_json_mode():
             print_json(resp.model_dump())
         else:
-            total_recipients = sum(len(recipients) for recipients in recipient_map.values())
-            print_success(f"Batch send complete! Sent to {total_recipients} recipient(s)")
+            total_recipients = sum(
+                len(recipients) for recipients in recipient_map.values()
+            )
+            print_success(
+                f"Batch send complete! Sent to {total_recipients} recipient(s)"
+            )
             print_success(f"TXID: {resp.txid}")
     except json.JSONDecodeError as e:
         print_error(f"Invalid JSON: {e}")
