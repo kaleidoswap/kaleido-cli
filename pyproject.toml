@@ -14,10 +14,9 @@ authors = [
 keywords = ["bitcoin", "lightning", "rgb", "kaleidoswap", "cli"]
 dependencies = [
     "kaleidoswap-sdk>=0.5.3",
-    "typer>=0.12",
-    "rich>=13",
-    "shellingham>=1.5",
-    "pyyaml>=6.0",
+    "typer>=0.12.0",
+    "rich>=13.0.0",
+    "pyyaml>=6.0.0",
 ]
 
 [project.scripts]
@@ -25,8 +24,8 @@ kaleido = "kaleido_cli.app:main"
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0",
-    "pytest-asyncio>=0.23",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
 ]
 
 [project.urls]
