@@ -6,13 +6,19 @@ import asyncio
 from typing import Annotated
 
 import typer
-
-from ..app import get_client
-from ..output import is_json_mode, print_error, print_json, print_success, print_table
 from kaleidoswap_sdk.rln import (
     ConnectPeerRequest,
     DisconnectPeerRequest,
     ListPeersResponse,
+)
+
+from kaleido_cli.context import get_client
+from kaleido_cli.output import (
+    is_json_mode,
+    print_error,
+    print_json,
+    print_success,
+    print_table,
 )
 
 peer_app = typer.Typer(
@@ -76,9 +82,7 @@ async def _peer_connect(peer: str) -> None:
     epilog="  [cyan]kaleido peer disconnect 03abc...def[/cyan]   Use 'kaleido peer list' to find pubkeys.",
 )
 def peer_disconnect(
-    pubkey: Annotated[
-        str, typer.Argument(help="Full pubkey of the peer to disconnect.")
-    ],
+    pubkey: Annotated[str, typer.Argument(help="Full pubkey of the peer to disconnect.")],
 ) -> None:
     """Disconnect from a peer."""
     asyncio.run(_peer_disconnect(pubkey))

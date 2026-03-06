@@ -3,19 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
-
-from ..app import get_client
-from ..output import (
-    is_json_mode,
-    output_model,
-    print_error,
-    print_json,
-    print_success,
-    print_table,
-)
 from kaleidoswap_sdk import (
     ChannelFees,
     ChannelOrderResponse,
@@ -29,6 +19,16 @@ from kaleidoswap_sdk.rln import (
     ListChannelsResponse,
     OpenChannelRequest,
     OpenChannelResponse,
+)
+
+from kaleido_cli.context import get_client
+from kaleido_cli.output import (
+    is_json_mode,
+    output_model,
+    print_error,
+    print_json,
+    print_success,
+    print_table,
 )
 
 channel_app = typer.Typer(
@@ -98,29 +98,21 @@ async def _channel_list() -> None:
     ),
 )
 def channel_open(
-    peer: Annotated[
-        str, typer.Argument(help="Peer in [green]pubkey@host:port[/green] format.")
-    ],
+    peer: Annotated[str, typer.Argument(help="Peer in [green]pubkey@host:port[/green] format.")],
     capacity: Annotated[
         int, typer.Option("--capacity", "-c", help="Channel capacity in satoshis.")
     ],
     push_msat: Annotated[
-        Optional[int],
-        typer.Option(
-            "--push-msat", help="Millisatoshis to push to the remote side on open."
-        ),
+        int | None,
+        typer.Option("--push-msat", help="Millisatoshis to push to the remote side on open."),
     ] = None,
     asset_id: Annotated[
-        Optional[str],
-        typer.Option(
-            "--asset-id", help="RGB asset ID to attach (creates a colored channel)."
-        ),
+        str | None,
+        typer.Option("--asset-id", help="RGB asset ID to attach (creates a colored channel)."),
     ] = None,
     asset_amount: Annotated[
-        Optional[int],
-        typer.Option(
-            "--asset-amount", help="Amount of RGB asset to place in the channel."
-        ),
+        int | None,
+        typer.Option("--asset-amount", help="Amount of RGB asset to place in the channel."),
     ] = None,
     public: Annotated[
         bool,
@@ -138,9 +130,7 @@ def channel_open(
         pubkey = peer
         addr = typer.prompt("Peer address (host:port)")
 
-    asyncio.run(
-        _channel_open(pubkey, addr, capacity, push_msat, asset_id, asset_amount, public)
-    )
+    asyncio.run(_channel_open(pubkey, addr, capacity, push_msat, asset_id, asset_amount, public))
 
 
 async def _channel_open(
@@ -189,14 +179,10 @@ def channel_close(
     channel_id: Annotated[
         str, typer.Argument(help="Channel ID to close (from 'kaleido channel list').")
     ],
-    peer_pubkey: Annotated[
-        str, typer.Option("--peer", help="Pubkey of the channel peer.")
-    ],
+    peer_pubkey: Annotated[str, typer.Option("--peer", help="Pubkey of the channel peer.")],
     force: Annotated[
         bool,
-        typer.Option(
-            "--force", help="Force (unilateral) close. Use only if peer is offline."
-        ),
+        typer.Option("--force", help="Force (unilateral) close. Use only if peer is offline."),
     ] = False,
 ) -> None:
     """Close a Lightning channel."""
@@ -239,42 +225,36 @@ async def _channel_close(channel_id: str, peer_pubkey: str, force: bool) -> None
     ),
 )
 def channel_order_create(
-    client_pubkey: Annotated[
-        str, typer.Argument(help="Client Lightning node public key.")
-    ],
+    client_pubkey: Annotated[str, typer.Argument(help="Client Lightning node public key.")],
     lsp_balance_sat: Annotated[
         int,
         typer.Option("--lsp-balance", help="LSP's balance in the channel (satoshis)."),
     ],
     client_balance_sat: Annotated[
         int,
-        typer.Option(
-            "--client-balance", help="Client's balance in the channel (satoshis)."
-        ),
+        typer.Option("--client-balance", help="Client's balance in the channel (satoshis)."),
     ],
     required_channel_confirmations: Annotated[
-        Optional[int],
+        int,
         typer.Option(
             "--confirmations",
             help="Required confirmations before channel is considered open.",
         ),
-    ] = None,
+    ] = 6,
     funding_confirms_within_blocks: Annotated[
-        Optional[int],
+        int,
         typer.Option(
             "--funding-within",
             help="Number of blocks within which funding must confirm.",
         ),
-    ] = None,
+    ] = 144,
     channel_expiry_blocks: Annotated[
-        Optional[int],
+        int | None,
         typer.Option("--expiry-blocks", help="Channel expiry in blocks."),
     ] = None,
-    token: Annotated[
-        Optional[str], typer.Option("--token", help="Authentication token.")
-    ] = None,
+    token: Annotated[str | None, typer.Option("--token", help="Authentication token.")] = None,
     refund_onchain_address: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--refund-address", help="Bitcoin address for refunds."),
     ] = None,
     announce_channel: Annotated[
@@ -282,24 +262,22 @@ def channel_order_create(
         typer.Option("--announce/--private", help="Announce channel publicly."),
     ] = True,
     asset_id: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--asset-id", help="RGB asset ID for colored channel."),
     ] = None,
     lsp_asset_amount: Annotated[
-        Optional[int],
+        int | None,
         typer.Option("--lsp-asset-amount", help="LSP's RGB asset amount."),
     ] = None,
     client_asset_amount: Annotated[
-        Optional[int],
+        int | None,
         typer.Option("--client-asset-amount", help="Client's RGB asset amount."),
     ] = None,
     rfq_id: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--rfq-id", help="Request for quote ID."),
     ] = None,
-    email: Annotated[
-        Optional[str], typer.Option("--email", help="Contact email.")
-    ] = None,
+    email: Annotated[str | None, typer.Option("--email", help="Contact email.")] = None,
 ) -> None:
     """Create an LSP channel order."""
     asyncio.run(
@@ -445,29 +423,25 @@ async def _channel_order_decide(order_id: str, accept: bool) -> None:
     ),
 )
 def channel_estimate_fees(
-    client_pubkey: Annotated[
-        str, typer.Argument(help="Client Lightning node public key.")
-    ],
+    client_pubkey: Annotated[str, typer.Argument(help="Client Lightning node public key.")],
     lsp_balance_sat: Annotated[
         int,
         typer.Option("--lsp-balance", help="LSP's balance in the channel (satoshis)."),
     ],
     client_balance_sat: Annotated[
         int,
-        typer.Option(
-            "--client-balance", help="Client's balance in the channel (satoshis)."
-        ),
+        typer.Option("--client-balance", help="Client's balance in the channel (satoshis)."),
     ],
     asset_id: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--asset-id", help="RGB asset ID for colored channel."),
     ] = None,
     lsp_asset_amount: Annotated[
-        Optional[int],
+        int | None,
         typer.Option("--lsp-asset-amount", help="LSP's RGB asset amount."),
     ] = None,
     client_asset_amount: Annotated[
-        Optional[int],
+        int | None,
         typer.Option("--client-asset-amount", help="Client's RGB asset amount."),
     ] = None,
 ) -> None:

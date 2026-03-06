@@ -3,29 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
-
-from ..app import get_client
-from ..output import (
-    is_json_mode,
-    output_model,
-    print_error,
-    print_json,
-    print_success,
-    print_table,
-)
 from kaleidoswap_sdk.rln import (
-    AssignmentFungible,
     AssetBalanceRequest,
     AssetBalanceResponse,
-    AssetCFA,
     AssetMetadataRequest,
     AssetMetadataResponse,
-    AssetNIA,
-    AssetUDA,
-    EmptyResponse,
+    AssignmentFungible,
     IssueAssetCFARequest,
     IssueAssetCFAResponse,
     IssueAssetNIARequest,
@@ -39,6 +25,16 @@ from kaleidoswap_sdk.rln import (
     RgbInvoiceResponse,
     SendRgbRequest,
     SendRgbResponse,
+)
+
+from kaleido_cli.context import get_client
+from kaleido_cli.output import (
+    is_json_mode,
+    output_model,
+    print_error,
+    print_json,
+    print_success,
+    print_table,
 )
 
 asset_app = typer.Typer(
@@ -71,9 +67,7 @@ async def _asset_list() -> None:
         # Add NIA assets
         if resp.nia:
             for asset in resp.nia:
-                rows.append(
-                    [asset.asset_id or "", asset.ticker or "-", asset.name or "", "NIA"]
-                )
+                rows.append([asset.asset_id or "", asset.ticker or "-", asset.name or "", "NIA"])
         # Add CFA assets
         if resp.cfa:
             for asset in resp.cfa:
@@ -81,9 +75,7 @@ async def _asset_list() -> None:
         # Add UDA assets
         if resp.uda:
             for asset in resp.uda:
-                rows.append(
-                    [asset.asset_id or "", asset.ticker or "-", asset.name or "", "UDA"]
-                )
+                rows.append([asset.asset_id or "", asset.ticker or "-", asset.name or "", "UDA"])
         print_table("RGB Assets", ["Asset ID", "Ticker", "Name", "Schema"], rows)
     except Exception as e:
         print_error(f"Error: {e}")
@@ -149,14 +141,10 @@ async def _asset_metadata(asset_id: str) -> None:
 )
 def asset_issue_nia(
     name: Annotated[str, typer.Option("--name", help="Human-readable asset name.")],
-    ticker: Annotated[
-        str, typer.Option("--ticker", help="Short ticker symbol, e.g. USDT.")
-    ],
+    ticker: Annotated[str, typer.Option("--ticker", help="Short ticker symbol, e.g. USDT.")],
     supply: Annotated[
         int,
-        typer.Option(
-            "--supply", help="Total supply expressed in the smallest raw unit."
-        ),
+        typer.Option("--supply", help="Total supply expressed in the smallest raw unit."),
     ],
     precision: Annotated[
         int,
@@ -171,9 +159,7 @@ async def _issue_nia(name: str, ticker: str, supply: int, precision: int) -> Non
     try:
         client = get_client(require_node=True)
         resp: IssueAssetNIAResponse = await client.rln.issue_asset_nia(
-            IssueAssetNIARequest(
-                name=name, ticker=ticker, amounts=[supply], precision=precision
-            )
+            IssueAssetNIARequest(name=name, ticker=ticker, amounts=[supply], precision=precision)
         )
         if is_json_mode():
             print_json(resp.model_dump())
@@ -200,11 +186,11 @@ def asset_issue_cfa(
     name: Annotated[str, typer.Option("--name", help="Asset name.")],
     supply: Annotated[int, typer.Option("--supply", help="Total supply in raw units.")],
     description: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--description", help="Optional description shown in wallets."),
     ] = None,
     file_path: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--file", help="Path to a media file (image, etc.) to embed."),
     ] = None,
     precision: Annotated[
@@ -260,7 +246,7 @@ async def _issue_cfa(
 def asset_invoice(
     asset_id: Annotated[str, typer.Argument(help="RGB asset ID to receive.")],
     amount: Annotated[
-        Optional[int],
+        int | None,
         typer.Option(
             "--amount",
             "-a",
@@ -268,21 +254,21 @@ def asset_invoice(
         ),
     ] = None,
     min_confirmations: Annotated[
-        Optional[int],
+        int | None,
         typer.Option(
             "--min-confirmations",
             help="Minimum number of confirmations required for the transfer.",
         ),
     ] = None,
     duration_seconds: Annotated[
-        Optional[int],
+        int | None,
         typer.Option(
             "--duration",
             help="Invoice validity duration in seconds.",
         ),
     ] = None,
     witness: Annotated[
-        Optional[bool],
+        bool | None,
         typer.Option(
             "--witness/--no-witness",
             help="Use witness-based transaction. Default is auto-detect.",
@@ -290,9 +276,7 @@ def asset_invoice(
     ] = None,
 ) -> None:
     """Create an RGB invoice to receive assets."""
-    asyncio.run(
-        _asset_invoice(asset_id, amount, min_confirmations, duration_seconds, witness)
-    )
+    asyncio.run(_asset_invoice(asset_id, amount, min_confirmations, duration_seconds, witness))
 
 
 async def _asset_invoice(
@@ -307,11 +291,7 @@ async def _asset_invoice(
         resp: RgbInvoiceResponse = await client.rln.create_rgb_invoice(
             RgbInvoiceRequest(
                 asset_id=asset_id,
-                assignment=(
-                    AssignmentFungible(type="Fungible", value=amount)
-                    if amount
-                    else None
-                ),
+                assignment=(AssignmentFungible(type="Fungible", value=amount) if amount else None),
                 min_confirmations=min_confirmations,
                 duration_seconds=duration_seconds,
                 witness=witness,
@@ -345,14 +325,14 @@ def asset_send(
     amount: Annotated[int, typer.Argument(help="Amount to send in raw asset units.")],
     invoice: Annotated[str, typer.Argument(help="Recipient RGB invoice.")],
     fee_rate: Annotated[
-        Optional[float],
+        float | None,
         typer.Option(
             "--fee-rate",
             help="On-chain fee rate in sat/vbyte. Uses node default if omitted.",
         ),
     ] = None,
     min_confirmations: Annotated[
-        Optional[int],
+        int | None,
         typer.Option(
             "--min-confirmations",
             help="Minimum number of confirmations required for the transfer.",
@@ -375,9 +355,7 @@ def asset_send(
 ) -> None:
     """Send RGB assets to an invoice."""
     asyncio.run(
-        _asset_send(
-            asset_id, amount, invoice, fee_rate, min_confirmations, donation, skip_sync
-        )
+        _asset_send(asset_id, amount, invoice, fee_rate, min_confirmations, donation, skip_sync)
     )
 
 
@@ -441,9 +419,7 @@ async def _asset_send(
     ),
 )
 def asset_send_batch(
-    json_file: Annotated[
-        str, typer.Argument(help="Path to JSON file with batch transfer data.")
-    ],
+    json_file: Annotated[str, typer.Argument(help="Path to JSON file with batch transfer data.")],
 ) -> None:
     """Send RGB assets to multiple recipients in a single transaction."""
     asyncio.run(_asset_send_batch(json_file))
@@ -471,9 +447,7 @@ async def _asset_send_batch(json_file: str) -> None:
             for r in recipients:
                 assignment_data = r["assignment"]
                 if assignment_data["type"] == "Fungible":
-                    assignment = AssignmentFungible(
-                        type="Fungible", value=assignment_data["value"]
-                    )
+                    assignment = AssignmentFungible(type="Fungible", value=assignment_data["value"])
                 else:
                     # Handle other assignment types if needed
                     assignment = assignment_data
@@ -498,12 +472,8 @@ async def _asset_send_batch(json_file: str) -> None:
         if is_json_mode():
             print_json(resp.model_dump())
         else:
-            total_recipients = sum(
-                len(recipients) for recipients in recipient_map.values()
-            )
-            print_success(
-                f"Batch send complete! Sent to {total_recipients} recipient(s)"
-            )
+            total_recipients = sum(len(recipients) for recipients in recipient_map.values())
+            print_success(f"Batch send complete! Sent to {total_recipients} recipient(s)")
             print_success(f"TXID: {resp.txid}")
     except json.JSONDecodeError as e:
         print_error(f"Invalid JSON: {e}")
@@ -522,7 +492,7 @@ async def _asset_send_batch(json_file: str) -> None:
 )
 def asset_transfers(
     asset_id: Annotated[
-        Optional[str],
+        str | None,
         typer.Argument(help="Filter by asset ID. Omit to show all transfers."),
     ] = None,
 ) -> None:
@@ -539,9 +509,7 @@ async def _asset_transfers(asset_id: str | None) -> None:
         if is_json_mode():
             print_json(resp.model_dump())
             return
-        rows = [
-            [t.idx, t.status, t.amount, t.txid or "-"] for t in (resp.transfers or [])
-        ]
+        rows = [[t.idx, t.status, t.amount, t.txid or "-"] for t in (resp.transfers or [])]
         print_table("RGB Transfers", ["Index", "Status", "Amount", "TXID"], rows)
     except Exception as e:
         print_error(f"Error: {e}")
@@ -577,7 +545,7 @@ async def _asset_refresh(skip_sync: bool) -> None:
     try:
         client = get_client(require_node=True)
         body = RefreshRequest(skip_sync=skip_sync if skip_sync else None)
-        resp: EmptyResponse = await client.rln.refresh_transfers(body)
+        await client.rln.refresh_transfers(body)
         print_success("Transfers refreshed.")
     except Exception as e:
         print_error(f"Error: {e}")

@@ -33,9 +33,7 @@ def list_spawn_names(base_dir: Path) -> list[str]:
     """
     if not base_dir.exists():
         return []
-    return sorted(
-        d.name for d in base_dir.iterdir() if d.is_dir() and (d / COMPOSE_FILE).exists()
-    )
+    return sorted(d.name for d in base_dir.iterdir() if d.is_dir() and (d / COMPOSE_FILE).exists())
 
 
 # ---------------------------------------------------------------------------
@@ -242,9 +240,7 @@ class SpawnManager(DockerManager):
 
         compose_dict = self._build_compose_dict(spawn_dir)
         compose_path = spawn_dir / COMPOSE_FILE
-        compose_path.write_text(
-            yaml.dump(compose_dict, default_flow_style=False, sort_keys=False)
-        )
+        compose_path.write_text(yaml.dump(compose_dict, default_flow_style=False, sort_keys=False))
         print_success(f"Compose file written to {compose_path}")
         return compose_path
 

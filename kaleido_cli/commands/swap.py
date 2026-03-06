@@ -3,20 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
-
-from ..app import get_client
-from ..output import (
-    is_json_mode,
-    output_model,
-    print_error,
-    print_info,
-    print_json,
-    print_success,
-    print_table,
-)
 from kaleidoswap_sdk import (
     Layer,
     OrderHistoryResponse,
@@ -28,6 +17,15 @@ from kaleidoswap_sdk import (
     TradingPairsResponse,
 )
 from kaleidoswap_sdk.rln import ListSwapsResponse
+
+from kaleido_cli.context import get_client
+from kaleido_cli.output import (
+    is_json_mode,
+    output_model,
+    print_error,
+    print_json,
+    print_table,
+)
 
 swap_app = typer.Typer(
     no_args_is_help=True,
@@ -55,14 +53,14 @@ def swap_quote(
         ),
     ],
     from_amount: Annotated[
-        Optional[int],
+        int | None,
         typer.Option(
             "--from-amount",
             help="Amount to send (raw units). Provide this OR --to-amount.",
         ),
     ] = None,
     to_amount: Annotated[
-        Optional[int],
+        int | None,
         typer.Option(
             "--to-amount",
             help="Amount to receive (raw units). Provide this OR --from-amount.",
@@ -74,9 +72,7 @@ def swap_quote(
     ] = "BTC_LN",
     to_layer: Annotated[
         str,
-        typer.Option(
-            "--to-layer", help="Destination layer: BTC_LN, RGB_LN, BTC_ONCHAIN."
-        ),
+        typer.Option("--to-layer", help="Destination layer: BTC_LN, RGB_LN, BTC_ONCHAIN."),
     ] = "RGB_LN",
 ) -> None:
     """Get a swap quote (alias for 'kaleido market quote')."""
@@ -97,11 +93,7 @@ async def _swap_quote(
         client = get_client()
         pairs: TradingPairsResponse = await client.maker.list_pairs()
         matched = next(
-            (
-                p
-                for p in (pairs.pairs or [])
-                if f"{p.base.ticker}/{p.quote.ticker}" == pair.upper()
-            ),
+            (p for p in (pairs.pairs or []) if f"{p.base.ticker}/{p.quote.ticker}" == pair.upper()),
             None,
         )
         if not matched:
@@ -146,10 +138,8 @@ async def _swap_quote(
 )
 def swap_history(
     status: Annotated[
-        Optional[str],
-        typer.Option(
-            "--status", help="Filter by status: PENDING, FILLED, FAILED, EXPIRED."
-        ),
+        str | None,
+        typer.Option("--status", help="Filter by status: PENDING, FILLED, FAILED, EXPIRED."),
     ] = None,
     limit: Annotated[
         int, typer.Option("--limit", help="Maximum number of results to return.")
@@ -178,9 +168,7 @@ async def _swap_history(status: str | None, limit: int) -> None:
             ]
             for o in (resp.data or [])
         ]
-        print_table(
-            "Swap History", ["Order ID", "Status", "From", "To", "Created At"], rows
-        )
+        print_table("Swap History", ["Order ID", "Status", "From", "To", "Created At"], rows)
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)

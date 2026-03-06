@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
-from ..app import get_client, state
-from ..docker_manager import (
+from kaleido_cli.context import get_client, state
+from kaleido_cli.docker_manager import (
     DEFAULT_BASE_DAEMON_PORT,
     DEFAULT_BASE_PEER_PORT,
     DEFAULT_SPAWN_DIR,
@@ -18,7 +18,13 @@ from ..docker_manager import (
     SpawnManager,
     list_spawn_names,
 )
-from ..output import output_model, print_error, print_info, print_success, print_warning
+from kaleido_cli.output import (
+    output_model,
+    print_error,
+    print_info,
+    print_success,
+    print_warning,
+)
 
 node_app = typer.Typer(
     no_args_is_help=True,
@@ -62,7 +68,7 @@ def _dm(name: str) -> DockerManager:
     return DockerManager(str(_base_spawn_dir() / name))
 
 
-def _resolve_name(name: Optional[str]) -> str:
+def _resolve_name(name: str | None) -> str:
     """If *name* is None/empty, auto-resolve from available environments."""
     if name:
         return name
@@ -98,10 +104,8 @@ def _resolve_name(name: Optional[str]) -> str:
 )
 def node_create(
     name: Annotated[
-        Optional[str],
-        typer.Argument(
-            help="Environment name (directory under spawn-dir). Prompted if omitted."
-        ),
+        str | None,
+        typer.Argument(help="Environment name (directory under spawn-dir). Prompted if omitted."),
     ] = None,
 ) -> None:
     """[bold]Wizard:[/bold] configure and generate a named compose environment."""
@@ -127,8 +131,7 @@ def node_create(
         existing = list_spawn_names(base)
         if existing:
             print_info(
-                "  Existing environments: "
-                + ", ".join(f"[bold]{n}[/bold]" for n in existing)
+                "  Existing environments: " + ", ".join(f"[bold]{n}[/bold]" for n in existing)
             )
         name = typer.prompt("  Environment name", default="default")
 
@@ -146,9 +149,7 @@ def node_create(
     count = typer.prompt("  How many RGB Lightning Nodes?", default=1, type=int)
 
     # ── Network ──────────────────────────────────────────────────────────────
-    network = typer.prompt(
-        "  Bitcoin network", default=state.config.network or "regtest"
-    )
+    network = typer.prompt("  Bitcoin network", default=state.config.network or "regtest")
 
     # ── Node ports ───────────────────────────────────────────────────────────
     print_info("  ── Node ports ────────────────────────────────────────")
@@ -225,11 +226,7 @@ def node_list() -> None:
         print_info(f"  [bold]{n}[/bold]  →  {env_dir}")
         if urls:
             for i, url in enumerate(urls, start=1):
-                marker = (
-                    "[green]●[/green]"
-                    if url == state.config.node_url
-                    else "[dim]○[/dim]"
-                )
+                marker = "[green]●[/green]" if url == state.config.node_url else "[dim]○[/dim]"
                 print_info(f"    {marker} node {i}: {url}")
         else:
             print_info("    [dim](no nodes detected in compose)[/dim]")
@@ -250,14 +247,12 @@ def node_list() -> None:
 )
 def node_use(
     name: Annotated[
-        Optional[str],
+        str | None,
         typer.Argument(help="Environment name. Auto-detected if only one exists."),
     ] = None,
     node: Annotated[
         int,
-        typer.Option(
-            "--node", "-n", help="1-based index of the node to select (default: 1)."
-        ),
+        typer.Option("--node", "-n", help="1-based index of the node to select (default: 1)."),
     ] = 1,
 ) -> None:
     """Set node-url in config to point at a node in a named environment."""
@@ -266,9 +261,7 @@ def node_use(
     name = _resolve_name(name)
     urls = _dm(name).node_urls()
     if not urls:
-        print_error(
-            f"No nodes found in environment '{name}'. Is the compose file present?"
-        )
+        print_error(f"No nodes found in environment '{name}'. Is the compose file present?")
         raise typer.Exit(1)
     if node < 1 or node > len(urls):
         print_error(
@@ -298,7 +291,7 @@ def node_use(
 )
 def node_up(
     name: Annotated[
-        Optional[str],
+        str | None,
         typer.Argument(
             help="Environment name (from 'kaleido node list'). Auto-detected if only one exists."
         ),
@@ -326,7 +319,7 @@ def node_up(
 )
 def node_stop(
     name: Annotated[
-        Optional[str],
+        str | None,
         typer.Argument(help="Environment name. Auto-detected if only one exists."),
     ] = None,
 ) -> None:
@@ -345,7 +338,7 @@ def node_stop(
 )
 def node_down(
     name: Annotated[
-        Optional[str],
+        str | None,
         typer.Argument(help="Environment name. Auto-detected if only one exists."),
     ] = None,
 ) -> None:
@@ -361,7 +354,7 @@ def node_down(
 @node_app.command("ps")
 def node_ps(
     name: Annotated[
-        Optional[str],
+        str | None,
         typer.Argument(help="Environment name. Auto-detected if only one exists."),
     ] = None,
 ) -> None:
@@ -384,11 +377,11 @@ def node_ps(
 )
 def node_logs(
     name: Annotated[
-        Optional[str],
+        str | None,
         typer.Argument(help="Environment name. Auto-detected if only one exists."),
     ] = None,
     service: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--service",
             "-s",
@@ -413,12 +406,10 @@ def node_logs(
 )
 def node_clean(
     name: Annotated[
-        Optional[str],
+        str | None,
         typer.Argument(help="Environment name. Auto-detected if only one exists."),
     ] = None,
-    yes: Annotated[
-        bool, typer.Option("--yes", "-y", help="Skip confirmation prompt.")
-    ] = False,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip confirmation prompt.")] = False,
 ) -> None:
     """[red]Remove all data volumes for an environment (irreversible).[/red]"""
     name = _resolve_name(name)
@@ -485,7 +476,7 @@ async def _node_info() -> None:
 )
 def node_init(
     password: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--password",
             "-p",
@@ -496,9 +487,7 @@ def node_init(
 ) -> None:
     """Initialize a new node wallet (run once after first start)."""
     if password is None:
-        password = typer.prompt(
-            "Wallet password", hide_input=True, confirmation_prompt=True
-        )
+        password = typer.prompt("Wallet password", hide_input=True, confirmation_prompt=True)
     asyncio.run(_node_init(password))
 
 
@@ -535,7 +524,7 @@ async def _node_init(password: str) -> None:
 )
 def node_unlock(
     password: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--password",
             "-p",
@@ -544,7 +533,7 @@ def node_unlock(
         ),
     ] = None,
     bitcoind_pass: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--bitcoind-pass",
             help="bitcoind RPC password (default: password).",
@@ -552,40 +541,40 @@ def node_unlock(
         ),
     ] = None,
     bitcoind_user: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--bitcoind-user", help="bitcoind RPC username (default: user)."),
     ] = None,
     bitcoind_host: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--bitcoind-host",
             help="bitcoind RPC host (default: regtest-bitcoind.rgbtools.org).",
         ),
     ] = None,
     bitcoind_port: Annotated[
-        Optional[int],
+        int | None,
         typer.Option("--bitcoind-port", help="bitcoind RPC port (default: 80)."),
     ] = None,
     indexer_url: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--indexer-url",
             help="Electrs indexer URL (default: electrum.rgbtools.org:50041).",
         ),
     ] = None,
     proxy_endpoint: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--proxy-endpoint",
             help="RGB proxy endpoint (default: rpcs://proxy.iriswallet.com/0.2/json-rpc).",
         ),
     ] = None,
     announce_alias: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--announce-alias", help="Lightning peer alias to announce."),
     ] = None,
     announce_address: Annotated[
-        Optional[list[str]],
+        list[str] | None,
         typer.Option(
             "--announce-address",
             help="Public address(es) for Lightning peer discovery (can be repeated).",
@@ -653,9 +642,7 @@ async def _node_unlock(
 
         # Show what was configured
         if bitcoind_pass:
-            print_info(
-                f"Connected to bitcoind: {bitcoind_user}@{bitcoind_host}:{bitcoind_port}"
-            )
+            print_info(f"Connected to bitcoind: {bitcoind_user}@{bitcoind_host}:{bitcoind_port}")
         if indexer_url:
             print_info(f"Connected to indexer: {indexer_url}")
         if proxy_endpoint:

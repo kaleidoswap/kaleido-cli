@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 
-from ..app import get_client
-from ..output import is_json_mode, output_model, print_error, print_json, print_table
+from kaleido_cli.context import get_client
+from kaleido_cli.output import (
+    is_json_mode,
+    output_model,
+    print_error,
+    print_json,
+    print_table,
+)
 
 market_app = typer.Typer(
     no_args_is_help=True,
@@ -36,8 +42,8 @@ async def _market_assets() -> None:
         if is_json_mode():
             print_json(resp.model_dump())
             return
-        rows = [[a.ticker, a.name, a.precision] for a in (resp.assets or [])]
-        print_table("Tradeable Assets", ["Ticker", "Name", "Precision"], rows)
+        rows = [[a.ticker, a.name, a.protocol_ids, a.precision] for a in (resp.assets or [])]
+        print_table("Tradeable Assets", ["Ticker", "Name", "Protocol IDs", "Precision"], rows)
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
@@ -66,9 +72,7 @@ async def _market_pairs() -> None:
             ]
             for p in (resp.pairs or [])
         ]
-        print_table(
-            "Trading Pairs", ["Pair", "Base", "Quote", "Routes", "Active"], rows
-        )
+        print_table("Trading Pairs", ["Pair", "Base", "Quote", "Routes", "Active"], rows)
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
@@ -96,14 +100,14 @@ def market_quote(
         ),
     ],
     from_amount: Annotated[
-        Optional[int],
+        int | None,
         typer.Option(
             "--from-amount",
             help="Amount to send (raw units of the base asset). Provide this OR --to-amount.",
         ),
     ] = None,
     to_amount: Annotated[
-        Optional[int],
+        int | None,
         typer.Option(
             "--to-amount",
             help="Amount to receive (raw units of the quote asset). Provide this OR --from-amount.",
@@ -144,11 +148,7 @@ async def _market_quote(
         client = get_client()
         pairs = await client.maker.list_pairs()
         matched = next(
-            (
-                p
-                for p in (pairs.pairs or [])
-                if f"{p.base.ticker}/{p.quote.ticker}" == pair.upper()
-            ),
+            (p for p in (pairs.pairs or []) if f"{p.base.ticker}/{p.quote.ticker}" == pair.upper()),
             None,
         )
         if not matched:

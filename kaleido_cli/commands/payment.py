@@ -3,19 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
-
-from ..app import get_client
-from ..output import (
-    is_json_mode,
-    output_model,
-    print_error,
-    print_json,
-    print_success,
-    print_table,
-)
 from kaleidoswap_sdk.rln import (
     DecodeLNInvoiceRequest,
     DecodeLNInvoiceResponse,
@@ -25,11 +15,21 @@ from kaleidoswap_sdk.rln import (
     GetPaymentResponse,
     InvoiceStatusRequest,
     InvoiceStatusResponse,
+    ListPaymentsResponse,
     LNInvoiceRequest,
     LNInvoiceResponse,
-    ListPaymentsResponse,
     SendPaymentRequest,
     SendPaymentResponse,
+)
+
+from kaleido_cli.context import get_client
+from kaleido_cli.output import (
+    is_json_mode,
+    output_model,
+    print_error,
+    print_json,
+    print_success,
+    print_table,
 )
 
 payment_app = typer.Typer(
@@ -55,7 +55,7 @@ payment_app = typer.Typer(
 )
 def payment_invoice(
     amount_msat: Annotated[
-        Optional[int],
+        int | None,
         typer.Option(
             "--amount-msat",
             "-a",
@@ -63,7 +63,7 @@ def payment_invoice(
         ),
     ] = None,
     expiry: Annotated[
-        Optional[int],
+        int | None,
         typer.Option(
             "--expiry",
             "-e",
@@ -71,14 +71,14 @@ def payment_invoice(
         ),
     ] = None,
     asset_id: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--asset-id",
             help="RGB asset ID to request over Lightning (creates an RGB+LN invoice).",
         ),
     ] = None,
     asset_amount: Annotated[
-        Optional[int],
+        int | None,
         typer.Option("--asset-amount", help="Amount of RGB asset to request."),
     ] = None,
 ) -> None:
@@ -123,10 +123,8 @@ async def _payment_invoice(
 def payment_send(
     invoice: Annotated[str, typer.Argument(help="BOLT11 invoice string to pay.")],
     amount_msat: Annotated[
-        Optional[int],
-        typer.Option(
-            "--amount-msat", help="Amount in msat. Required for zero-amount invoices."
-        ),
+        int | None,
+        typer.Option("--amount-msat", help="Amount in msat. Required for zero-amount invoices."),
     ] = None,
 ) -> None:
     """Send a Lightning payment."""
@@ -169,9 +167,7 @@ async def _payment_list() -> None:
             ]
             for p in (resp.payments or [])
         ]
-        print_table(
-            "Payments", ["Payment Hash", "Status", "Amount (msat)", "Direction"], rows
-        )
+        print_table("Payments", ["Payment Hash", "Status", "Amount (msat)", "Direction"], rows)
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
@@ -211,9 +207,7 @@ async def _payment_status(payment_hash: str) -> None:
     ),
 )
 def payment_decode(
-    invoice: Annotated[
-        str, typer.Argument(help="BOLT11 or RGB invoice string to inspect.")
-    ],
+    invoice: Annotated[str, typer.Argument(help="BOLT11 or RGB invoice string to inspect.")],
 ) -> None:
     """Decode a Lightning or RGB invoice."""
     asyncio.run(_payment_decode(invoice))

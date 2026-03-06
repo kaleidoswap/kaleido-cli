@@ -6,15 +6,15 @@ from typing import Annotated
 
 import typer
 
-from ..config import (
+from kaleido_cli.config import (
+    _KEY_ALIASES,
     CONFIG_FILE,
     CliConfig,
     load_config,
     save_config,
     set_config_key,
-    _KEY_ALIASES,
 )
-from ..output import (
+from kaleido_cli.output import (
     is_json_mode,
     print_error,
     print_info,
@@ -87,9 +87,7 @@ def config_set(
     ),
 )
 def config_reset(
-    yes: Annotated[
-        bool, typer.Option("--yes", "-y", help="Skip the confirmation prompt.")
-    ] = False,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip the confirmation prompt.")] = False,
 ) -> None:
     """Reset all configuration to defaults."""
     if not yes:
