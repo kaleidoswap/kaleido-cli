@@ -14,44 +14,69 @@ A command-line interface for managing RGB Lightning Nodes and interacting with t
 ## Requirements
 
 - Python 3.10+
-- [uv](https://docs.astral.sh/uv/) (recommended) **or** pip
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
 - Docker & Docker Compose (required for `node` commands)
 
 ---
 
 ## Installation
 
-### Using `uv` (recommended)
+### One command for macOS, Linux, and Windows
+
+```bash
+uv tool install git+https://github.com/kaleidoswap/kaleido-cli.git
+```
+
+This installs the `kaleido` command globally without cloning the repo first.
+
+Then run:
+
+```bash
+kaleido setup
+```
+
+`kaleido setup` walks you through either:
+
+- a market-only setup that works without Docker
+- a local-node setup that creates a Docker environment for you
+
+### Alternative installers
+
+Install directly from a local checkout for development:
 
 ```bash
 git clone https://github.com/kaleidoswap/kaleido-cli
 cd kaleido-cli
-
-# Install globally so the `kaleido` command is available system-wide
 make install
 ```
 
-The `--editable` flag means local code changes take effect immediately without reinstalling.
-
-### Using pip
+Or use the cross-platform bootstrap script from a checkout:
 
 ```bash
-pip install .
+python install.py
 ```
 
 ### Makefile targets
 
-| Command          | Description                        |
-|------------------|------------------------------------|
-| `make install`   | Install CLI globally via `uv tool` |
-| `make uninstall` | Remove the global installation     |
-| `make reinstall` | Uninstall then reinstall           |
+| Command          | Description                               |
+|------------------|-------------------------------------------|
+| `make install`   | Install the current checkout via `uv tool` |
+| `make uninstall` | Remove the global installation            |
+| `make reinstall` | Uninstall then reinstall                  |
 
 ---
 
 ## Initial Configuration
 
-Configuration is stored in `~/.kaleido/config.json` and created automatically on first use.
+Configuration is stored in `~/.kaleido/config.json`.
+
+For first-time use, prefer:
+
+```bash
+kaleido setup
+```
+
+If you want to configure manually, use:
 
 ```bash
 kaleido config show                              # view current config
@@ -105,10 +130,8 @@ The wizard prompts for:
 2. **Environment name** — becomes a subdirectory under the base dir
 3. **Node count** — number of RGB Lightning Nodes to spin up
 4. **Network** — `regtest`, `signet`, or `mainnet`
-5. **Full infra stack** — optionally include bitcoind, electrs, and RGB proxy
-   - If yes: RPC username, password (auto-generated if left blank), and ports for each service
-6. **Node ports** — base daemon API port (3001+) and LDK peer port (9735+)
-7. **Start now** — whether to bring containers up immediately
+5. **Node ports** — base daemon API port (3001+) and LDK peer port (9735+)
+6. **Start now** — whether to bring containers up immediately
 
 ### Managing environments
 
@@ -169,6 +192,7 @@ kaleido --json market pairs
 
 | Command                                   | Description                                         |
 |-------------------------------------------|-----------------------------------------------------|
+| `kaleido setup`                           | Guided first-run setup for market-only or local use |
 | `kaleido node create [name]`              | Wizard: configure and generate a named environment  |
 | `kaleido node list`                       | List all environments with node URLs                |
 | `kaleido node use <name> [--node N]`      | Set node-url to node N in an environment            |
@@ -260,31 +284,32 @@ kaleido market quote BTC/USDT --from-amount 100000 --from-layer BTC_LN --to-laye
 
 ```bash
 # 1. Install
-make install
+uv tool install git+https://github.com/kaleidoswap/kaleido-cli.git
 
-# 2. Create a local regtest environment with full infra
-kaleido node create testenv
-#   → wizard: choose base dir, node count, ports, bitcoind creds, etc.
-#   → answer "yes" to "Start containers now?"
+# 2. Run the guided setup
+kaleido setup
 
-# 3. Point the CLI at the new node
-kaleido node use testenv
-
-# 4. Initialise and unlock the wallet
+# 3. If you chose a local node, initialise and unlock the wallet
 kaleido node init
 kaleido node unlock
 
-# 5. Check the node is healthy
+# 4. If you chose a local node, confirm it is healthy
 kaleido node status
 
-# 6. Fund the wallet (regtest: mine blocks externally or use faucet)
+# 5. If you chose a local node, get a funding address
 kaleido wallet address
 
-# 7. Browse available trading pairs
+# 6. Browse available trading pairs
 kaleido market pairs
 
-# 8. Get a swap quote
+# 7. Get a swap quote
 kaleido market quote BTC/USDT --from-amount 100000
+```
+
+For a non-interactive local setup with defaults:
+
+```bash
+kaleido setup --mode local --create-node --defaults
 ```
 
 ### Working with multiple nodes

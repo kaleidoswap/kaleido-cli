@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "kaleido-cli"
 version = "0.1.0"
 description = "CLI for managing RGB Lightning Nodes and interacting with Kaleidoswap"
+readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [
@@ -30,7 +31,7 @@ dev = [
 
 [project.urls]
 Homepage = "https://kaleidoswap.com"
-Repository = "https://github.com/kaleidoswap/kaleido-sdk"
+Repository = "https://github.com/kaleidoswap/kaleido-cli"
 
 [tool.hatch.build.targets.wheel]
 packages = ["kaleido_cli"]

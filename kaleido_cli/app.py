@@ -8,6 +8,7 @@ import typer
 
 from .config import load_config
 from .context import state
+from .onboarding import SetupMode, run_setup
 from .output import set_json_mode
 
 # ---------------------------------------------------------------------------
@@ -18,6 +19,8 @@ app = typer.Typer(
     name="kaleido",
     help=(
         "Manage RGB Lightning Nodes and interact with the Kaleidoswap protocol.\n\n"
+        "[bold]First time here?[/bold]\n\n"
+        "  [cyan]kaleido setup[/cyan]               Guided setup for market-only or local-node use\n\n"
         "[bold]Global flags[/bold] can be placed before any sub-command:\n\n"
         "  [cyan]kaleido --node-url http://localhost:3001 wallet balance[/cyan]\n"
         "  [cyan]kaleido --json market pairs[/cyan]\n\n"
@@ -59,6 +62,81 @@ def _root(
     state.node_url = node_url
     state.api_url = api_url
     set_json_mode(json_output)
+
+
+@app.command(
+    "setup",
+    epilog=(
+        "[bold]Examples[/bold]\n\n"
+        "  Interactive first-run setup:\n"
+        "  [cyan]kaleido setup[/cyan]\n\n"
+        "  Market-only defaults without prompts:\n"
+        "  [cyan]kaleido setup --mode market --defaults[/cyan]\n\n"
+        "  Create and start a local node environment with defaults:\n"
+        "  [cyan]kaleido setup --mode local --create-node --defaults[/cyan]"
+    ),
+)
+def setup_command(
+    mode: Annotated[
+        SetupMode | None,
+        typer.Option("--mode", help="Setup profile: 'market' or 'local'."),
+    ] = None,
+    defaults: Annotated[
+        bool,
+        typer.Option(
+            "--defaults",
+            help="Use saved/default values for any omitted options instead of prompting.",
+        ),
+    ] = False,
+    api_url: Annotated[
+        str | None,
+        typer.Option("--api-url", help="Kaleidoswap API URL to save in config."),
+    ] = None,
+    network: Annotated[
+        str | None,
+        typer.Option("--network", help="Bitcoin network to save in config."),
+    ] = None,
+    node_url: Annotated[
+        str | None,
+        typer.Option("--node-url", help="RGB Lightning Node URL to save in config."),
+    ] = None,
+    create_node: Annotated[
+        bool | None,
+        typer.Option(
+            "--create-node/--no-create-node",
+            help="Create a local Docker node environment during setup.",
+        ),
+    ] = None,
+    spawn_dir: Annotated[
+        str | None,
+        typer.Option("--spawn-dir", help="Base directory for local node environments."),
+    ] = None,
+    env_name: Annotated[
+        str | None,
+        typer.Option("--env-name", help="Environment name when creating a local node."),
+    ] = None,
+    node_count: Annotated[
+        int | None,
+        typer.Option("--node-count", min=1, help="Number of nodes to create."),
+    ] = None,
+    start: Annotated[
+        bool | None,
+        typer.Option("--start/--no-start", help="Start the node environment after creating it."),
+    ] = None,
+) -> None:
+    """Guide first-time configuration and optionally create a local node environment."""
+    run_setup(
+        mode=mode,
+        defaults=defaults,
+        api_url=api_url,
+        network=network,
+        node_url=node_url,
+        create_node=create_node,
+        spawn_dir=spawn_dir,
+        env_name=env_name,
+        node_count=node_count,
+        start=start,
+    )
 
 
 # ---------------------------------------------------------------------------
