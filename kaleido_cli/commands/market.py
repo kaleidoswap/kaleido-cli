@@ -130,17 +130,17 @@ def market_quote(
     ] = "RGB_LN",
 ) -> None:
     """Get a swap quote for a trading pair."""
-    wizard = is_interactive()
-
-    if pair is None:
-        if wizard:
-            pair = typer.prompt("Trading pair (e.g. BTC/USDT)")
-        else:
-            print_error("PAIR argument is required in non-interactive mode.")
-            raise typer.Exit(1)
+    resolved_pair: str
+    if pair is not None:
+        resolved_pair = pair
+    elif is_interactive():
+        resolved_pair = typer.prompt("Trading pair (e.g. BTC/USDT)")
+    else:
+        print_error("PAIR argument is required in non-interactive mode.")
+        raise typer.Exit(1)
 
     if from_amount is None and to_amount is None:
-        if wizard:
+        if is_interactive():
             choice = typer.prompt("Quote by [S]end amount or [R]eceive amount?", default="S")
             if choice.strip().upper().startswith("R"):
                 to_amount = typer.prompt("Amount to receive (raw units)", type=int)
@@ -150,7 +150,7 @@ def market_quote(
             print_error("Provide --from-amount or --to-amount in non-interactive mode.")
             raise typer.Exit(1)
 
-    asyncio.run(_market_quote(pair, from_amount, to_amount, from_layer, to_layer))
+    asyncio.run(_market_quote(resolved_pair, from_amount, to_amount, from_layer, to_layer))
 
 
 async def _market_quote(

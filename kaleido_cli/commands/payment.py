@@ -64,13 +64,13 @@ def payment_invoice(
         ),
     ] = None,
     expiry: Annotated[
-        int | None,
+        int,
         typer.Option(
             "--expiry",
             "-e",
-            help="Invoice expiry in seconds. Defaults to node setting.",
+            help="Invoice expiry in seconds.",
         ),
-    ] = None,
+    ] = 3600,
     asset_id: Annotated[
         str | None,
         typer.Option(
@@ -89,7 +89,7 @@ def payment_invoice(
 
 async def _payment_invoice(
     amount_msat: int | None,
-    expiry: int | None,
+    expiry: int,
     asset_id: str | None,
     asset_amount: int | None,
 ) -> None:
@@ -129,22 +129,22 @@ def payment_send(
     ] = None,
 ) -> None:
     """Send a Lightning payment."""
-    wizard = is_interactive()
+    resolved_invoice: str
+    if invoice is not None:
+        resolved_invoice = invoice
+    elif is_interactive():
+        resolved_invoice = typer.prompt("BOLT11 invoice")
+    else:
+        print_error("INVOICE argument is required in non-interactive mode.")
+        raise typer.Exit(1)
 
-    if invoice is None:
-        if wizard:
-            invoice = typer.prompt("BOLT11 invoice")
-        else:
-            print_error("INVOICE argument is required in non-interactive mode.")
-            raise typer.Exit(1)
-
-    asyncio.run(_payment_send(invoice, amount_msat))
+    asyncio.run(_payment_send(resolved_invoice, amount_msat))
 
 
 async def _payment_send(invoice: str, amount_msat: int | None) -> None:
     try:
         client = get_client(require_node=True)
-        body = SendPaymentRequest(invoice=invoice, amount_msat=amount_msat)
+        body = SendPaymentRequest(invoice=invoice, amt_msat=amount_msat)
         resp: SendPaymentResponse = await client.rln.send_payment(body)
         if is_json_mode():
             print_json(resp.model_dump())
@@ -228,14 +228,12 @@ async def _payment_decode(invoice: str) -> None:
         client = get_client(require_node=True)
         # Try BOLT11 first, then RGB
         try:
-            resp: DecodeLNInvoiceResponse = await client.rln.decode_ln_invoice(
-                DecodeLNInvoiceRequest(invoice=invoice)
-            )
+            resp: (
+                DecodeLNInvoiceResponse | DecodeRGBInvoiceResponse
+            ) = await client.rln.decode_ln_invoice(DecodeLNInvoiceRequest(invoice=invoice))
             kind = "Lightning (BOLT11)"
         except Exception:
-            resp: DecodeRGBInvoiceResponse = await client.rln.decode_rgb_invoice(
-                DecodeRGBInvoiceRequest(invoice=invoice)
-            )
+            resp = await client.rln.decode_rgb_invoice(DecodeRGBInvoiceRequest(invoice=invoice))
             kind = "RGB Invoice"
 
         if is_json_mode():

@@ -37,6 +37,11 @@ Repository = "https://github.com/kaleidoswap/kaleido-cli"
 [tool.hatch.build.targets.wheel]
 packages = ["kaleido_cli"]
 
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.10"
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"

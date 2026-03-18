@@ -65,14 +65,16 @@ def peer_connect(
     ] = None,
 ) -> None:
     """Connect to a peer."""
-    if peer is None:
-        if is_interactive():
-            peer = typer.prompt("Peer (pubkey@host:port)")
-        else:
-            print_error("PEER argument is required in non-interactive mode.")
-            raise typer.Exit(1)
+    resolved_peer: str
+    if peer is not None:
+        resolved_peer = peer
+    elif is_interactive():
+        resolved_peer = typer.prompt("Peer (pubkey@host:port)")
+    else:
+        print_error("PEER argument is required in non-interactive mode.")
+        raise typer.Exit(1)
 
-    asyncio.run(_peer_connect(peer))
+    asyncio.run(_peer_connect(resolved_peer))
 
 
 async def _peer_connect(peer: str) -> None:
@@ -96,20 +98,22 @@ def peer_disconnect(
     ] = None,
 ) -> None:
     """Disconnect from a peer."""
-    if pubkey is None:
-        if is_interactive():
-            pubkey = typer.prompt("Peer pubkey (from 'kaleido peer list')")
-        else:
-            print_error("PUBKEY argument is required in non-interactive mode.")
-            raise typer.Exit(1)
+    resolved_pubkey: str
+    if pubkey is not None:
+        resolved_pubkey = pubkey
+    elif is_interactive():
+        resolved_pubkey = typer.prompt("Peer pubkey (from 'kaleido peer list')")
+    else:
+        print_error("PUBKEY argument is required in non-interactive mode.")
+        raise typer.Exit(1)
 
-    asyncio.run(_peer_disconnect(pubkey))
+    asyncio.run(_peer_disconnect(resolved_pubkey))
 
 
 async def _peer_disconnect(pubkey: str) -> None:
     try:
         client = get_client(require_node=True)
-        await client.rln.disconnect_peer(DisconnectPeerRequest(pubkey=pubkey))
+        await client.rln.disconnect_peer(DisconnectPeerRequest(peer_pubkey=pubkey))
         print_success(f"Disconnected from {pubkey}")
     except Exception as e:
         print_error(f"Error: {e}")

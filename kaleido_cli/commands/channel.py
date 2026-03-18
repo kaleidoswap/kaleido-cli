@@ -108,9 +108,9 @@ def channel_open(
         typer.Option("--capacity", "-c", help="Channel capacity in satoshis."),
     ] = None,
     push_msat: Annotated[
-        int | None,
+        int,
         typer.Option("--push-msat", help="Millisatoshis to push to the remote side on open."),
-    ] = None,
+    ] = 0,
     asset_id: Annotated[
         str | None,
         typer.Option("--asset-id", help="RGB asset ID to attach (creates a colored channel)."),
@@ -128,50 +128,50 @@ def channel_open(
     ] = True,
 ) -> None:
     """Open a Lightning channel to a peer."""
-    wizard = is_interactive()
+    resolved_peer: str
+    if peer is not None:
+        resolved_peer = peer
+    elif is_interactive():
+        resolved_peer = typer.prompt("Peer (pubkey@host:port)")
+    else:
+        print_error("PEER argument is required in non-interactive mode.")
+        raise typer.Exit(1)
 
-    if peer is None:
-        if wizard:
-            peer = typer.prompt("Peer (pubkey@host:port)")
-        else:
-            print_error("PEER argument is required in non-interactive mode.")
-            raise typer.Exit(1)
+    resolved_capacity: int
+    if capacity is not None:
+        resolved_capacity = capacity
+    elif is_interactive():
+        resolved_capacity = typer.prompt("Channel capacity (satoshis)", type=int)
+    else:
+        print_error("--capacity is required in non-interactive mode.")
+        raise typer.Exit(1)
 
-    if capacity is None:
-        if wizard:
-            capacity = typer.prompt("Channel capacity (satoshis)", type=int)
-        else:
-            print_error("--capacity is required in non-interactive mode.")
-            raise typer.Exit(1)
-
-    if wizard:
-        raw = typer.prompt("Push msat to remote side? (Enter to skip)", default="")
-        if raw.strip():
-            push_msat = int(raw.strip())
+    if is_interactive():
+        push_msat = typer.prompt("[OPTIONAL] Push msat to remote side", default=push_msat, type=int)
         if asset_id is None and typer.confirm("Attach an RGB asset?", default=False):
             asset_id = typer.prompt("Asset ID (rgb:...)")
             asset_amount = typer.prompt("Asset amount", type=int)
         public = typer.confirm("Announce channel publicly?", default=True)
 
     # Parse pubkey@host:port
-    if "@" in peer:
-        pubkey, addr = peer.split("@", 1)
+    if "@" in resolved_peer:
+        pubkey, addr = resolved_peer.split("@", 1)
     else:
-        pubkey = peer
-        if wizard:
+        pubkey = resolved_peer
+        if is_interactive():
             addr = typer.prompt("Peer address (host:port)")
         else:
             print_error("Peer must be in pubkey@host:port format in non-interactive mode.")
             raise typer.Exit(1)
 
-    asyncio.run(_channel_open(pubkey, addr, capacity, push_msat, asset_id, asset_amount, public))
+    asyncio.run(_channel_open(pubkey, addr, resolved_capacity, push_msat, asset_id, asset_amount, public))
 
 
 async def _channel_open(
     pubkey: str,
     addr: str,
     capacity: int,
-    push_msat: int | None,
+    push_msat: int,
     asset_id: str | None,
     asset_amount: int | None,
     public: bool,
@@ -185,6 +185,7 @@ async def _channel_open(
             asset_id=asset_id,
             asset_amount=asset_amount,
             public=public,
+            with_anchors=False,
         )
         resp: OpenChannelResponse = await client.rln.open_channel(body)
         if is_json_mode():
@@ -224,23 +225,25 @@ def channel_close(
     ] = False,
 ) -> None:
     """Close a Lightning channel."""
-    wizard = is_interactive()
+    resolved_channel_id: str
+    if channel_id is not None:
+        resolved_channel_id = channel_id
+    elif is_interactive():
+        resolved_channel_id = typer.prompt("Channel ID (from 'kaleido channel list')")
+    else:
+        print_error("CHANNEL_ID argument is required in non-interactive mode.")
+        raise typer.Exit(1)
 
-    if channel_id is None:
-        if wizard:
-            channel_id = typer.prompt("Channel ID (from 'kaleido channel list')")
-        else:
-            print_error("CHANNEL_ID argument is required in non-interactive mode.")
-            raise typer.Exit(1)
+    resolved_peer_pubkey: str
+    if peer_pubkey is not None:
+        resolved_peer_pubkey = peer_pubkey
+    elif is_interactive():
+        resolved_peer_pubkey = typer.prompt("Peer pubkey")
+    else:
+        print_error("--peer is required in non-interactive mode.")
+        raise typer.Exit(1)
 
-    if peer_pubkey is None:
-        if wizard:
-            peer_pubkey = typer.prompt("Peer pubkey")
-        else:
-            print_error("--peer is required in non-interactive mode.")
-            raise typer.Exit(1)
-
-    asyncio.run(_channel_close(channel_id, peer_pubkey, force))
+    asyncio.run(_channel_close(resolved_channel_id, resolved_peer_pubkey, force))
 
 
 async def _channel_close(channel_id: str, peer_pubkey: str, force: bool) -> None:
@@ -306,9 +309,9 @@ def channel_order_create(
         ),
     ] = 144,
     channel_expiry_blocks: Annotated[
-        int | None,
-        typer.Option("--expiry-blocks", help="Channel expiry in blocks."),
-    ] = None,
+        int,
+        typer.Option("--expiry-blocks", help="Channel expiry in blocks (0 = no expiry)."),
+    ] = 0,
     token: Annotated[str | None, typer.Option("--token", help="Authentication token.")] = None,
     refund_onchain_address: Annotated[
         str | None,
@@ -337,34 +340,38 @@ def channel_order_create(
     email: Annotated[str | None, typer.Option("--email", help="Contact email.")] = None,
 ) -> None:
     """Create an LSP channel order."""
-    wizard = is_interactive()
+    resolved_client_pubkey: str
+    if client_pubkey is not None:
+        resolved_client_pubkey = client_pubkey
+    elif is_interactive():
+        resolved_client_pubkey = typer.prompt("Client Lightning node public key")
+    else:
+        print_error("CLIENT_PUBKEY argument is required in non-interactive mode.")
+        raise typer.Exit(1)
 
-    if client_pubkey is None:
-        if wizard:
-            client_pubkey = typer.prompt("Client Lightning node public key")
-        else:
-            print_error("CLIENT_PUBKEY argument is required in non-interactive mode.")
-            raise typer.Exit(1)
+    resolved_lsp_balance_sat: int
+    if lsp_balance_sat is not None:
+        resolved_lsp_balance_sat = lsp_balance_sat
+    elif is_interactive():
+        resolved_lsp_balance_sat = typer.prompt("LSP balance in channel (satoshis)", type=int)
+    else:
+        print_error("--lsp-balance is required in non-interactive mode.")
+        raise typer.Exit(1)
 
-    if lsp_balance_sat is None:
-        if wizard:
-            lsp_balance_sat = typer.prompt("LSP balance in channel (satoshis)", type=int)
-        else:
-            print_error("--lsp-balance is required in non-interactive mode.")
-            raise typer.Exit(1)
-
-    if client_balance_sat is None:
-        if wizard:
-            client_balance_sat = typer.prompt("Client balance in channel (satoshis)", type=int)
-        else:
-            print_error("--client-balance is required in non-interactive mode.")
-            raise typer.Exit(1)
+    resolved_client_balance_sat: int
+    if client_balance_sat is not None:
+        resolved_client_balance_sat = client_balance_sat
+    elif is_interactive():
+        resolved_client_balance_sat = typer.prompt("Client balance in channel (satoshis)", type=int)
+    else:
+        print_error("--client-balance is required in non-interactive mode.")
+        raise typer.Exit(1)
 
     asyncio.run(
         _channel_order_create(
-            client_pubkey=client_pubkey,
-            lsp_balance_sat=lsp_balance_sat,
-            client_balance_sat=client_balance_sat,
+            client_pubkey=resolved_client_pubkey,
+            lsp_balance_sat=resolved_lsp_balance_sat,
+            client_balance_sat=resolved_client_balance_sat,
             required_channel_confirmations=required_channel_confirmations,
             funding_confirms_within_blocks=funding_confirms_within_blocks,
             channel_expiry_blocks=channel_expiry_blocks,
@@ -384,9 +391,9 @@ async def _channel_order_create(
     client_pubkey: str,
     lsp_balance_sat: int,
     client_balance_sat: int,
-    required_channel_confirmations: int | None,
-    funding_confirms_within_blocks: int | None,
-    channel_expiry_blocks: int | None,
+    required_channel_confirmations: int,
+    funding_confirms_within_blocks: int,
+    channel_expiry_blocks: int,
     token: str | None,
     refund_onchain_address: str | None,
     announce_channel: bool,
@@ -471,23 +478,23 @@ def channel_order_decide(
     reject: Annotated[bool, typer.Option("--reject", help="Reject the order.")] = False,
 ) -> None:
     """Submit a rate decision for an LSP channel order."""
-    wizard = is_interactive()
+    resolved_order_id: str
+    if order_id is not None:
+        resolved_order_id = order_id
+    elif is_interactive():
+        resolved_order_id = typer.prompt("LSP order ID")
+    else:
+        print_error("ORDER_ID argument is required in non-interactive mode.")
+        raise typer.Exit(1)
 
-    if order_id is None:
-        if wizard:
-            order_id = typer.prompt("LSP order ID")
-        else:
-            print_error("ORDER_ID argument is required in non-interactive mode.")
-            raise typer.Exit(1)
-
-    if wizard and not accept and not reject:
+    if is_interactive() and not accept and not reject:
         accept = typer.confirm("Accept this order?", default=False)
         reject = not accept
     elif accept == reject:
         print_error("Must specify exactly one of --accept or --reject")
         raise typer.Exit(1)
 
-    asyncio.run(_channel_order_decide(order_id, accept))
+    asyncio.run(_channel_order_decide(resolved_order_id, accept))
 
 
 async def _channel_order_decide(order_id: str, accept: bool) -> None:
@@ -539,39 +546,63 @@ def channel_estimate_fees(
         int | None,
         typer.Option("--client-asset-amount", help="Client's RGB asset amount."),
     ] = None,
+    required_channel_confirmations: Annotated[
+        int,
+        typer.Option("--confirmations", help="Required confirmations before channel is considered open."),
+    ] = 6,
+    funding_confirms_within_blocks: Annotated[
+        int,
+        typer.Option("--funding-within", help="Number of blocks within which funding must confirm."),
+    ] = 144,
+    channel_expiry_blocks: Annotated[
+        int,
+        typer.Option("--expiry-blocks", help="Channel expiry in blocks (0 = no expiry)."),
+    ] = 0,
+    announce_channel: Annotated[
+        bool,
+        typer.Option("--announce/--private", help="Announce channel publicly."),
+    ] = True,
 ) -> None:
     """Estimate fees for opening an LSP channel."""
-    wizard = is_interactive()
+    resolved_client_pubkey: str
+    if client_pubkey is not None:
+        resolved_client_pubkey = client_pubkey
+    elif is_interactive():
+        resolved_client_pubkey = typer.prompt("Client Lightning node public key")
+    else:
+        print_error("CLIENT_PUBKEY argument is required in non-interactive mode.")
+        raise typer.Exit(1)
 
-    if client_pubkey is None:
-        if wizard:
-            client_pubkey = typer.prompt("Client Lightning node public key")
-        else:
-            print_error("CLIENT_PUBKEY argument is required in non-interactive mode.")
-            raise typer.Exit(1)
+    resolved_lsp_balance_sat: int
+    if lsp_balance_sat is not None:
+        resolved_lsp_balance_sat = lsp_balance_sat
+    elif is_interactive():
+        resolved_lsp_balance_sat = typer.prompt("LSP balance in channel (satoshis)", type=int)
+    else:
+        print_error("--lsp-balance is required in non-interactive mode.")
+        raise typer.Exit(1)
 
-    if lsp_balance_sat is None:
-        if wizard:
-            lsp_balance_sat = typer.prompt("LSP balance in channel (satoshis)", type=int)
-        else:
-            print_error("--lsp-balance is required in non-interactive mode.")
-            raise typer.Exit(1)
-
-    if client_balance_sat is None:
-        if wizard:
-            client_balance_sat = typer.prompt("Client balance in channel (satoshis)", type=int)
-        else:
-            print_error("--client-balance is required in non-interactive mode.")
-            raise typer.Exit(1)
+    resolved_client_balance_sat: int
+    if client_balance_sat is not None:
+        resolved_client_balance_sat = client_balance_sat
+    elif is_interactive():
+        resolved_client_balance_sat = typer.prompt("Client balance in channel (satoshis)", type=int)
+    else:
+        print_error("--client-balance is required in non-interactive mode.")
+        raise typer.Exit(1)
 
     asyncio.run(
         _channel_estimate_fees(
-            client_pubkey,
-            lsp_balance_sat,
-            client_balance_sat,
+            resolved_client_pubkey,
+            resolved_lsp_balance_sat,
+            resolved_client_balance_sat,
             asset_id,
             lsp_asset_amount,
             client_asset_amount,
+            required_channel_confirmations,
+            funding_confirms_within_blocks,
+            channel_expiry_blocks,
+            announce_channel,
         )
     )
 
@@ -583,6 +614,10 @@ async def _channel_estimate_fees(
     asset_id: str | None,
     lsp_asset_amount: int | None,
     client_asset_amount: int | None,
+    required_channel_confirmations: int,
+    funding_confirms_within_blocks: int,
+    channel_expiry_blocks: int,
+    announce_channel: bool,
 ) -> None:
     try:
         client = get_client()
@@ -590,10 +625,13 @@ async def _channel_estimate_fees(
             client_pubkey=client_pubkey,
             lsp_balance_sat=lsp_balance_sat,
             client_balance_sat=client_balance_sat,
+            required_channel_confirmations=required_channel_confirmations,
+            funding_confirms_within_blocks=funding_confirms_within_blocks,
+            channel_expiry_blocks=channel_expiry_blocks,
             asset_id=asset_id,
             lsp_asset_amount=lsp_asset_amount,
             client_asset_amount=client_asset_amount,
-            announce_channel=True,
+            announce_channel=announce_channel,
         )
         resp: ChannelFees = await client.maker.estimate_lsp_fees(body)
         if is_json_mode():

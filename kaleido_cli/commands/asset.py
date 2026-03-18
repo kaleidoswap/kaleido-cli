@@ -159,33 +159,37 @@ def asset_issue_nia(
     ] = 0,
 ) -> None:
     """Issue a new NIA (Non-Inflatable Asset) RGB token."""
-    wizard = is_interactive()
+    resolved_name: str
+    if name is not None:
+        resolved_name = name
+    elif is_interactive():
+        resolved_name = typer.prompt("Asset name")
+    else:
+        print_error("--name is required in non-interactive mode.")
+        raise typer.Exit(1)
 
-    if name is None:
-        if wizard:
-            name = typer.prompt("Asset name")
-        else:
-            print_error("--name is required in non-interactive mode.")
-            raise typer.Exit(1)
+    resolved_ticker: str
+    if ticker is not None:
+        resolved_ticker = ticker
+    elif is_interactive():
+        resolved_ticker = typer.prompt("Ticker symbol (e.g. USDT)")
+    else:
+        print_error("--ticker is required in non-interactive mode.")
+        raise typer.Exit(1)
 
-    if ticker is None:
-        if wizard:
-            ticker = typer.prompt("Ticker symbol (e.g. USDT)")
-        else:
-            print_error("--ticker is required in non-interactive mode.")
-            raise typer.Exit(1)
+    resolved_supply: int
+    if supply is not None:
+        resolved_supply = supply
+    elif is_interactive():
+        resolved_supply = typer.prompt("Total supply (raw units)", type=int)
+    else:
+        print_error("--supply is required in non-interactive mode.")
+        raise typer.Exit(1)
 
-    if supply is None:
-        if wizard:
-            supply = typer.prompt("Total supply (raw units)", type=int)
-        else:
-            print_error("--supply is required in non-interactive mode.")
-            raise typer.Exit(1)
+    if is_interactive():
+        precision = typer.prompt("[OPTIONAL] Decimal places (0 = whole units)", default=0, type=int)
 
-    if wizard:
-        precision = typer.prompt("Decimal places (0 = whole units)", default=0, type=int)
-
-    asyncio.run(_issue_nia(name, ticker, supply, precision))
+    asyncio.run(_issue_nia(resolved_name, resolved_ticker, resolved_supply, precision))
 
 
 async def _issue_nia(name: str, ticker: str, supply: int, precision: int) -> None:
@@ -238,32 +242,34 @@ def asset_issue_cfa(
     ] = 0,
 ) -> None:
     """Issue a new CFA (Collectible Fungible Asset) RGB token."""
-    wizard = is_interactive()
+    resolved_name: str
+    if name is not None:
+        resolved_name = name
+    elif is_interactive():
+        resolved_name = typer.prompt("Asset name")
+    else:
+        print_error("--name is required in non-interactive mode.")
+        raise typer.Exit(1)
 
-    if name is None:
-        if wizard:
-            name = typer.prompt("Asset name")
-        else:
-            print_error("--name is required in non-interactive mode.")
-            raise typer.Exit(1)
+    resolved_supply: int
+    if supply is not None:
+        resolved_supply = supply
+    elif is_interactive():
+        resolved_supply = typer.prompt("Total supply (raw units)", type=int)
+    else:
+        print_error("--supply is required in non-interactive mode.")
+        raise typer.Exit(1)
 
-    if supply is None:
-        if wizard:
-            supply = typer.prompt("Total supply (raw units)", type=int)
-        else:
-            print_error("--supply is required in non-interactive mode.")
-            raise typer.Exit(1)
-
-    if wizard:
-        raw = typer.prompt("Description (Enter to skip)", default="")
+    if is_interactive():
+        raw = typer.prompt("[OPTIONAL] Description (Enter to skip)", default="")
         if raw.strip():
             description = raw.strip()
-        raw = typer.prompt("Media file path (Enter to skip)", default="")
+        raw = typer.prompt("[OPTIONAL] Media file path (Enter to skip)", default="")
         if raw.strip():
             file_path = raw.strip()
-        precision = typer.prompt("Decimal places (0 = whole units)", default=0, type=int)
+        precision = typer.prompt("[OPTIONAL] Decimal places (0 = whole units)", default=0, type=int)
 
-    asyncio.run(_issue_cfa(name, supply, description, file_path, precision))
+    asyncio.run(_issue_cfa(resolved_name, resolved_supply, description, file_path, precision))
 
 
 async def _issue_cfa(
@@ -279,8 +285,8 @@ async def _issue_cfa(
             name=name,
             amounts=[supply],
             precision=precision,
-            description=description,
-            file_path=file_path,
+            details=description,
+            file_digest=file_path,
         )
         resp: IssueAssetCFAResponse = await client.rln.issue_asset_cfa(body)
         if is_json_mode():
@@ -318,12 +324,12 @@ def asset_invoice(
         ),
     ] = None,
     min_confirmations: Annotated[
-        int | None,
+        int,
         typer.Option(
             "--min-confirmations",
             help="Minimum number of confirmations required for the transfer.",
         ),
-    ] = None,
+    ] = 0,
     duration_seconds: Annotated[
         int | None,
         typer.Option(
@@ -332,37 +338,37 @@ def asset_invoice(
         ),
     ] = None,
     witness: Annotated[
-        bool | None,
+        bool,
         typer.Option(
             "--witness/--no-witness",
-            help="Use witness-based transaction. Default is auto-detect.",
+            help="Use witness-based transaction.",
         ),
-    ] = None,
+    ] = False,
 ) -> None:
     """Create an RGB invoice to receive assets."""
-    wizard = is_interactive()
+    resolved_asset_id: str
+    if asset_id is not None:
+        resolved_asset_id = asset_id
+    elif is_interactive():
+        resolved_asset_id = typer.prompt("RGB asset ID (rgb:...)")
+    else:
+        print_error("ASSET_ID argument is required in non-interactive mode.")
+        raise typer.Exit(1)
 
-    if asset_id is None:
-        if wizard:
-            asset_id = typer.prompt("RGB asset ID (rgb:...)")
-        else:
-            print_error("ASSET_ID argument is required in non-interactive mode.")
-            raise typer.Exit(1)
-
-    if wizard and amount is None:
-        raw = typer.prompt("Amount to request? (Enter for any-amount invoice)", default="")
+    if is_interactive() and amount is None:
+        raw = typer.prompt("[OPTIONAL] Amount to request (Enter for any-amount invoice)", default="")
         if raw.strip():
             amount = int(raw.strip())
 
-    asyncio.run(_asset_invoice(asset_id, amount, min_confirmations, duration_seconds, witness))
+    asyncio.run(_asset_invoice(resolved_asset_id, amount, min_confirmations, duration_seconds, witness))
 
 
 async def _asset_invoice(
     asset_id: str,
     amount: int | None,
-    min_confirmations: int | None,
+    min_confirmations: int,
     duration_seconds: int | None,
-    witness: bool | None,
+    witness: bool,
 ) -> None:
     try:
         client = get_client(require_node=True)
@@ -403,19 +409,19 @@ def asset_send(
     amount: Annotated[int | None, typer.Argument(help="Amount to send in raw asset units.")] = None,
     invoice: Annotated[str | None, typer.Argument(help="Recipient RGB invoice.")] = None,
     fee_rate: Annotated[
-        int | None,
+        int,
         typer.Option(
             "--fee-rate",
-            help="On-chain fee rate in sat/vbyte (integer). Uses node default if omitted.",
+            help="On-chain fee rate in sat/vbyte.",
         ),
-    ] = None,
+    ] = 1,
     min_confirmations: Annotated[
-        int | None,
+        int,
         typer.Option(
             "--min-confirmations",
             help="Minimum number of confirmations required for the transfer.",
         ),
-    ] = None,
+    ] = 0,
     donation: Annotated[
         bool,
         typer.Option(
@@ -432,31 +438,35 @@ def asset_send(
     ] = False,
 ) -> None:
     """Send RGB assets to an invoice."""
-    wizard = is_interactive()
+    resolved_asset_id: str
+    if asset_id is not None:
+        resolved_asset_id = asset_id
+    elif is_interactive():
+        resolved_asset_id = typer.prompt("RGB asset ID (rgb:...)")
+    else:
+        print_error("ASSET_ID argument is required in non-interactive mode.")
+        raise typer.Exit(1)
 
-    if asset_id is None:
-        if wizard:
-            asset_id = typer.prompt("RGB asset ID (rgb:...)")
-        else:
-            print_error("ASSET_ID argument is required in non-interactive mode.")
-            raise typer.Exit(1)
+    resolved_amount: int
+    if amount is not None:
+        resolved_amount = amount
+    elif is_interactive():
+        resolved_amount = typer.prompt("Amount to send (raw units)", type=int)
+    else:
+        print_error("AMOUNT argument is required in non-interactive mode.")
+        raise typer.Exit(1)
 
-    if amount is None:
-        if wizard:
-            amount = typer.prompt("Amount to send (raw units)", type=int)
-        else:
-            print_error("AMOUNT argument is required in non-interactive mode.")
-            raise typer.Exit(1)
-
-    if invoice is None:
-        if wizard:
-            invoice = typer.prompt("Recipient RGB invoice")
-        else:
-            print_error("INVOICE argument is required in non-interactive mode.")
-            raise typer.Exit(1)
+    resolved_invoice: str
+    if invoice is not None:
+        resolved_invoice = invoice
+    elif is_interactive():
+        resolved_invoice = typer.prompt("Recipient RGB invoice")
+    else:
+        print_error("INVOICE argument is required in non-interactive mode.")
+        raise typer.Exit(1)
 
     asyncio.run(
-        _asset_send(asset_id, amount, invoice, fee_rate, min_confirmations, donation, skip_sync)
+        _asset_send(resolved_asset_id, resolved_amount, resolved_invoice, fee_rate, min_confirmations, donation, skip_sync)
     )
 
 
@@ -464,8 +474,8 @@ async def _asset_send(
     asset_id: str,
     amount: int,
     invoice: str,
-    fee_rate: int | None,
-    min_confirmations: int | None,
+    fee_rate: int,
+    min_confirmations: int,
     donation: bool,
     skip_sync: bool,
 ) -> None:
@@ -477,13 +487,14 @@ async def _asset_send(
                     Recipient(
                         recipient_id=invoice,
                         assignment=AssignmentFungible(type="Fungible", value=amount),
+                        transport_endpoints=[],
                     )
                 ]
             },
             fee_rate=fee_rate,
             min_confirmations=min_confirmations,
-            donation=donation if donation else None,
-            skip_sync=skip_sync if skip_sync else None,
+            donation=donation,
+            skip_sync=skip_sync,
         )
         resp: SendRgbResponse = await client.rln.send_rgb(body)
         if is_json_mode():
@@ -557,16 +568,17 @@ async def _asset_send_batch(json_file: str) -> None:
                     Recipient(
                         recipient_id=r["recipient_id"],
                         assignment=assignment,
+                        transport_endpoints=r.get("transport_endpoints", []),
                     )
                 )
             recipient_map[asset_id] = recipient_list
 
         body = SendRgbRequest(
             recipient_map=recipient_map,
-            fee_rate=data.get("fee_rate"),
-            min_confirmations=data.get("min_confirmations"),
-            donation=data.get("donation"),
-            skip_sync=data.get("skip_sync"),
+            fee_rate=data.get("fee_rate", 1),
+            min_confirmations=data.get("min_confirmations", 0),
+            donation=bool(data.get("donation", False)),
+            skip_sync=bool(data.get("skip_sync", False)),
         )
 
         resp: SendRgbResponse = await client.rln.send_rgb(body)
@@ -593,15 +605,15 @@ async def _asset_send_batch(json_file: str) -> None:
 )
 def asset_transfers(
     asset_id: Annotated[
-        str | None,
-        typer.Argument(help="Filter by asset ID. Omit to show all transfers."),
-    ] = None,
+        str,
+        typer.Argument(help="RGB asset ID to list transfers for."),
+    ],
 ) -> None:
-    """List RGB transfers."""
+    """List RGB transfers for a specific asset."""
     asyncio.run(_asset_transfers(asset_id))
 
 
-async def _asset_transfers(asset_id: str | None) -> None:
+async def _asset_transfers(asset_id: str) -> None:
     try:
         client = get_client(require_node=True)
         resp: ListTransfersResponse = await client.rln.list_transfers(
@@ -615,7 +627,9 @@ async def _asset_transfers(asset_id: str | None) -> None:
                 t.idx,
                 t.status,
                 # Amount lives in requested_assignment for fungible transfers
-                t.requested_assignment.value if isinstance(t.requested_assignment, AssignmentFungible) else "-",
+                t.requested_assignment.value
+                if isinstance(t.requested_assignment, AssignmentFungible)
+                else "-",
                 t.txid or "-",
             ]
             for t in (resp.transfers or [])
@@ -654,7 +668,7 @@ def asset_refresh(
 async def _asset_refresh(skip_sync: bool) -> None:
     try:
         client = get_client(require_node=True)
-        body = RefreshRequest(skip_sync=skip_sync if skip_sync else None)
+        body = RefreshRequest(skip_sync=skip_sync)
         await client.rln.refresh_transfers(body)
         print_success("Transfers refreshed.")
     except Exception as e:
