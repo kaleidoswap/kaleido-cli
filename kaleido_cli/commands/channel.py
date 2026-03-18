@@ -6,15 +6,15 @@ import asyncio
 from typing import Annotated
 
 import typer
-from kaleidoswap_sdk import (
+from kaleido_sdk import (
     ChannelFees,
     ChannelOrderResponse,
     CreateOrderRequest,
-    GetOrderRequest,
+    OrderRequest,
     RateDecisionRequest,
     RateDecisionResponse,
 )
-from kaleidoswap_sdk.rln import (
+from kaleido_sdk.rln import (
     CloseChannelRequest,
     ListChannelsResponse,
     OpenChannelRequest,
@@ -364,7 +364,7 @@ async def _channel_order_get(order_id: str) -> None:
     try:
         client = get_client()
         resp: ChannelOrderResponse = await client.maker.get_lsp_order(
-            GetOrderRequest(order_id=order_id)
+            OrderRequest(order_id=order_id)
         )
         if is_json_mode():
             print_json(resp.model_dump())
@@ -401,7 +401,7 @@ def channel_order_decide(
 async def _channel_order_decide(order_id: str, accept: bool) -> None:
     try:
         client = get_client()
-        body = RateDecisionRequest(order_id=order_id, accept=accept)
+        body = RateDecisionRequest(order_id=order_id, accept_new_rate=accept)
         resp: RateDecisionResponse = await client.maker.submit_lsp_rate_decision(body)
         if is_json_mode():
             print_json(resp.model_dump())

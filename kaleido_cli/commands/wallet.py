@@ -6,7 +6,7 @@ import asyncio
 from typing import Annotated
 
 import typer
-from kaleidoswap_sdk.rln import (
+from kaleido_sdk.rln import (
     AddressResponse,
     BackupRequest,
     BtcBalanceResponse,
@@ -105,8 +105,8 @@ def wallet_send(
     amount: Annotated[int, typer.Argument(help="Amount to send in satoshis.")],
     address: Annotated[str, typer.Argument(help="Destination Bitcoin address.")],
     fee_rate: Annotated[
-        float | None,
-        typer.Option("--fee-rate", help="Fee rate in sat/vbyte. Uses node default if omitted."),
+        int | None,
+        typer.Option("--fee-rate", help="Fee rate in sat/vbyte (integer). Uses node default if omitted."),
     ] = None,
     skip_sync: Annotated[
         bool,
@@ -117,7 +117,7 @@ def wallet_send(
     asyncio.run(_wallet_send(amount, address, fee_rate, skip_sync))
 
 
-async def _wallet_send(amount: int, address: str, fee_rate: float | None, skip_sync: bool) -> None:
+async def _wallet_send(amount: int, address: str, fee_rate: int | None, skip_sync: bool) -> None:
     try:
         client = get_client(require_node=True)
         body = SendBtcRequest(
@@ -199,8 +199,8 @@ def wallet_create_utxos(
         typer.Option("--up-to", help="If true, num represents total limit instead of count."),
     ] = False,
     fee_rate: Annotated[
-        float | None,
-        typer.Option("--fee-rate", help="On-chain fee rate in sat/vbyte."),
+        int | None,
+        typer.Option("--fee-rate", help="On-chain fee rate in sat/vbyte (integer)."),
     ] = None,
     skip_sync: Annotated[
         bool,
@@ -223,7 +223,7 @@ async def _wallet_create_utxos(
     num: int | None,
     size: int | None,
     up_to: bool,
-    fee_rate: float | None,
+    fee_rate: int | None,
     skip_sync: bool,
 ) -> None:
     try:

@@ -6,7 +6,7 @@ import asyncio
 from typing import Annotated
 
 import typer
-from kaleidoswap_sdk.rln import (
+from kaleido_sdk.rln import (
     ConnectPeerRequest,
     DisconnectPeerRequest,
     ListPeersResponse,

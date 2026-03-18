@@ -492,7 +492,7 @@ def node_init(
 
 
 async def _node_init(password: str) -> None:
-    from kaleidoswap_sdk.rln import InitRequest
+    from kaleido_sdk.rln import InitRequest
 
     try:
         client = get_client(require_node=True)
@@ -621,7 +621,7 @@ async def _node_unlock(
     announce_alias: str,
     announce_addresses: list[str],
 ) -> None:
-    from kaleidoswap_sdk.rln import UnlockRequest
+    from kaleido_sdk.rln import UnlockRequest
 
     try:
         client = get_client(require_node=True)

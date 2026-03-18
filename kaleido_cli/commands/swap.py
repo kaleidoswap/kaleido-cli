@@ -6,7 +6,7 @@ import asyncio
 from typing import Annotated
 
 import typer
-from kaleidoswap_sdk import (
+from kaleido_sdk import (
     Layer,
     OrderHistoryResponse,
     PairQuoteRequest,
@@ -16,7 +16,7 @@ from kaleidoswap_sdk import (
     SwapOrderStatusResponse,
     TradingPairsResponse,
 )
-from kaleidoswap_sdk.rln import ListSwapsResponse
+from kaleido_sdk.rln import ListSwapsResponse
 
 from kaleido_cli.context import get_client
 from kaleido_cli.output import (

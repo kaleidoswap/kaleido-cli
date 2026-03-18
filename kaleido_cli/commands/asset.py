@@ -6,7 +6,7 @@ import asyncio
 from typing import Annotated
 
 import typer
-from kaleidoswap_sdk.rln import (
+from kaleido_sdk.rln import (
     AssetBalanceRequest,
     AssetBalanceResponse,
     AssetMetadataRequest,
@@ -325,10 +325,10 @@ def asset_send(
     amount: Annotated[int, typer.Argument(help="Amount to send in raw asset units.")],
     invoice: Annotated[str, typer.Argument(help="Recipient RGB invoice.")],
     fee_rate: Annotated[
-        float | None,
+        int | None,
         typer.Option(
             "--fee-rate",
-            help="On-chain fee rate in sat/vbyte. Uses node default if omitted.",
+            help="On-chain fee rate in sat/vbyte (integer). Uses node default if omitted.",
         ),
     ] = None,
     min_confirmations: Annotated[
@@ -363,7 +363,7 @@ async def _asset_send(
     asset_id: str,
     amount: int,
     invoice: str,
-    fee_rate: float | None,
+    fee_rate: int | None,
     min_confirmations: int | None,
     donation: bool,
     skip_sync: bool,
@@ -411,7 +411,7 @@ async def _asset_send(
         '      {"recipient_id": "rgb:invoice3...", "assignment": {"type": "Fungible", "value": 50}}\n'
         "    ]\n"
         "  },\n"
-        '  "fee_rate": 2.5,\n'
+        '  "fee_rate": 2,\n'
         '  "min_confirmations": 3,\n'
         '  "donation": false,\n'
         '  "skip_sync": false\n'
@@ -509,7 +509,16 @@ async def _asset_transfers(asset_id: str | None) -> None:
         if is_json_mode():
             print_json(resp.model_dump())
             return
-        rows = [[t.idx, t.status, t.amount, t.txid or "-"] for t in (resp.transfers or [])]
+        rows = [
+            [
+                t.idx,
+                t.status,
+                # Amount lives in requested_assignment for fungible transfers
+                t.requested_assignment.value if isinstance(t.requested_assignment, AssignmentFungible) else "-",
+                t.txid or "-",
+            ]
+            for t in (resp.transfers or [])
+        ]
         print_table("RGB Transfers", ["Index", "Status", "Amount", "TXID"], rows)
     except Exception as e:
         print_error(f"Error: {e}")

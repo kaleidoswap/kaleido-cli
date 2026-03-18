@@ -142,7 +142,7 @@ async def _market_quote(
     from_layer: str,
     to_layer: str,
 ) -> None:
-    from kaleidoswap_sdk import Layer, PairQuoteRequest, SwapLegInput
+    from kaleido_sdk import Layer, PairQuoteRequest, SwapLegInput
 
     try:
         client = get_client()
