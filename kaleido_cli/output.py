@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from typing import Any
 
 from rich.console import Console
@@ -12,8 +13,9 @@ from rich.table import Table
 console = Console()
 err_console = Console(stderr=True)
 
-# Module-level flag; toggled by the global --json option
+# Module-level flags; toggled by global --json / --agent options
 _json_mode: bool = False
+_agent_mode: bool = False
 
 
 def set_json_mode(enabled: bool) -> None:
@@ -21,8 +23,18 @@ def set_json_mode(enabled: bool) -> None:
     _json_mode = enabled
 
 
+def set_agent_mode(enabled: bool) -> None:
+    global _agent_mode
+    _agent_mode = enabled
+
+
 def is_json_mode() -> bool:
     return _json_mode
+
+
+def is_interactive() -> bool:
+    """True when running in a human terminal (stdin+stdout are TTYs, not JSON/agent mode)."""
+    return sys.stdin.isatty() and sys.stdout.isatty() and not _json_mode and not _agent_mode
 
 
 # ---------------------------------------------------------------------------

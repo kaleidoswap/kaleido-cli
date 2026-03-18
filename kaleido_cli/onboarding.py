@@ -195,10 +195,10 @@ def run_setup(
         if created_env_name and created_env_started:
             print_panel(
                 "Next Steps",
-                f"1. kaleido node init\n"
-                f"2. kaleido node unlock\n"
-                f"3. kaleido node status\n"
-                f"4. kaleido wallet address",
+                "1. kaleido node init\n"
+                "2. kaleido node unlock\n"
+                "3. kaleido node status\n"
+                "4. kaleido wallet address",
                 style="green",
             )
         elif created_env_name:

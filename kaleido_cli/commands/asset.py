@@ -29,6 +29,7 @@ from kaleido_sdk.rln import (
 
 from kaleido_cli.context import get_client
 from kaleido_cli.output import (
+    is_interactive,
     is_json_mode,
     output_model,
     print_error,
@@ -140,18 +141,50 @@ async def _asset_metadata(asset_id: str) -> None:
     ),
 )
 def asset_issue_nia(
-    name: Annotated[str, typer.Option("--name", help="Human-readable asset name.")],
-    ticker: Annotated[str, typer.Option("--ticker", help="Short ticker symbol, e.g. USDT.")],
+    name: Annotated[
+        str | None,
+        typer.Option("--name", help="Human-readable asset name."),
+    ] = None,
+    ticker: Annotated[
+        str | None,
+        typer.Option("--ticker", help="Short ticker symbol, e.g. USDT."),
+    ] = None,
     supply: Annotated[
-        int,
+        int | None,
         typer.Option("--supply", help="Total supply expressed in the smallest raw unit."),
-    ],
+    ] = None,
     precision: Annotated[
         int,
         typer.Option("--precision", help="Number of decimal places (0 = whole units)."),
     ] = 0,
 ) -> None:
     """Issue a new NIA (Non-Inflatable Asset) RGB token."""
+    wizard = is_interactive()
+
+    if name is None:
+        if wizard:
+            name = typer.prompt("Asset name")
+        else:
+            print_error("--name is required in non-interactive mode.")
+            raise typer.Exit(1)
+
+    if ticker is None:
+        if wizard:
+            ticker = typer.prompt("Ticker symbol (e.g. USDT)")
+        else:
+            print_error("--ticker is required in non-interactive mode.")
+            raise typer.Exit(1)
+
+    if supply is None:
+        if wizard:
+            supply = typer.prompt("Total supply (raw units)", type=int)
+        else:
+            print_error("--supply is required in non-interactive mode.")
+            raise typer.Exit(1)
+
+    if wizard:
+        precision = typer.prompt("Decimal places (0 = whole units)", default=0, type=int)
+
     asyncio.run(_issue_nia(name, ticker, supply, precision))
 
 
@@ -183,8 +216,14 @@ async def _issue_nia(name: str, ticker: str, supply: int, precision: int) -> Non
     ),
 )
 def asset_issue_cfa(
-    name: Annotated[str, typer.Option("--name", help="Asset name.")],
-    supply: Annotated[int, typer.Option("--supply", help="Total supply in raw units.")],
+    name: Annotated[
+        str | None,
+        typer.Option("--name", help="Asset name."),
+    ] = None,
+    supply: Annotated[
+        int | None,
+        typer.Option("--supply", help="Total supply in raw units."),
+    ] = None,
     description: Annotated[
         str | None,
         typer.Option("--description", help="Optional description shown in wallets."),
@@ -199,6 +238,31 @@ def asset_issue_cfa(
     ] = 0,
 ) -> None:
     """Issue a new CFA (Collectible Fungible Asset) RGB token."""
+    wizard = is_interactive()
+
+    if name is None:
+        if wizard:
+            name = typer.prompt("Asset name")
+        else:
+            print_error("--name is required in non-interactive mode.")
+            raise typer.Exit(1)
+
+    if supply is None:
+        if wizard:
+            supply = typer.prompt("Total supply (raw units)", type=int)
+        else:
+            print_error("--supply is required in non-interactive mode.")
+            raise typer.Exit(1)
+
+    if wizard:
+        raw = typer.prompt("Description (Enter to skip)", default="")
+        if raw.strip():
+            description = raw.strip()
+        raw = typer.prompt("Media file path (Enter to skip)", default="")
+        if raw.strip():
+            file_path = raw.strip()
+        precision = typer.prompt("Decimal places (0 = whole units)", default=0, type=int)
+
     asyncio.run(_issue_cfa(name, supply, description, file_path, precision))
 
 
@@ -244,7 +308,7 @@ async def _issue_cfa(
     ),
 )
 def asset_invoice(
-    asset_id: Annotated[str, typer.Argument(help="RGB asset ID to receive.")],
+    asset_id: Annotated[str | None, typer.Argument(help="RGB asset ID to receive.")] = None,
     amount: Annotated[
         int | None,
         typer.Option(
@@ -276,6 +340,20 @@ def asset_invoice(
     ] = None,
 ) -> None:
     """Create an RGB invoice to receive assets."""
+    wizard = is_interactive()
+
+    if asset_id is None:
+        if wizard:
+            asset_id = typer.prompt("RGB asset ID (rgb:...)")
+        else:
+            print_error("ASSET_ID argument is required in non-interactive mode.")
+            raise typer.Exit(1)
+
+    if wizard and amount is None:
+        raw = typer.prompt("Amount to request? (Enter for any-amount invoice)", default="")
+        if raw.strip():
+            amount = int(raw.strip())
+
     asyncio.run(_asset_invoice(asset_id, amount, min_confirmations, duration_seconds, witness))
 
 
@@ -321,9 +399,9 @@ async def _asset_invoice(
     ),
 )
 def asset_send(
-    asset_id: Annotated[str, typer.Argument(help="RGB asset ID to send.")],
-    amount: Annotated[int, typer.Argument(help="Amount to send in raw asset units.")],
-    invoice: Annotated[str, typer.Argument(help="Recipient RGB invoice.")],
+    asset_id: Annotated[str | None, typer.Argument(help="RGB asset ID to send.")] = None,
+    amount: Annotated[int | None, typer.Argument(help="Amount to send in raw asset units.")] = None,
+    invoice: Annotated[str | None, typer.Argument(help="Recipient RGB invoice.")] = None,
     fee_rate: Annotated[
         int | None,
         typer.Option(
@@ -354,6 +432,29 @@ def asset_send(
     ] = False,
 ) -> None:
     """Send RGB assets to an invoice."""
+    wizard = is_interactive()
+
+    if asset_id is None:
+        if wizard:
+            asset_id = typer.prompt("RGB asset ID (rgb:...)")
+        else:
+            print_error("ASSET_ID argument is required in non-interactive mode.")
+            raise typer.Exit(1)
+
+    if amount is None:
+        if wizard:
+            amount = typer.prompt("Amount to send (raw units)", type=int)
+        else:
+            print_error("AMOUNT argument is required in non-interactive mode.")
+            raise typer.Exit(1)
+
+    if invoice is None:
+        if wizard:
+            invoice = typer.prompt("Recipient RGB invoice")
+        else:
+            print_error("INVOICE argument is required in non-interactive mode.")
+            raise typer.Exit(1)
+
     asyncio.run(
         _asset_send(asset_id, amount, invoice, fee_rate, min_confirmations, donation, skip_sync)
     )

@@ -24,6 +24,7 @@ from kaleido_sdk.rln import (
 
 from kaleido_cli.context import get_client
 from kaleido_cli.output import (
+    is_interactive,
     is_json_mode,
     output_model,
     print_error,
@@ -121,13 +122,22 @@ async def _payment_invoice(
     ),
 )
 def payment_send(
-    invoice: Annotated[str, typer.Argument(help="BOLT11 invoice string to pay.")],
+    invoice: Annotated[str | None, typer.Argument(help="BOLT11 invoice string to pay.")] = None,
     amount_msat: Annotated[
         int | None,
         typer.Option("--amount-msat", help="Amount in msat. Required for zero-amount invoices."),
     ] = None,
 ) -> None:
     """Send a Lightning payment."""
+    wizard = is_interactive()
+
+    if invoice is None:
+        if wizard:
+            invoice = typer.prompt("BOLT11 invoice")
+        else:
+            print_error("INVOICE argument is required in non-interactive mode.")
+            raise typer.Exit(1)
+
     asyncio.run(_payment_send(invoice, amount_msat))
 
 

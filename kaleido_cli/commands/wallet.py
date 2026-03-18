@@ -21,6 +21,7 @@ from kaleido_sdk.rln import (
 
 from kaleido_cli.context import get_client
 from kaleido_cli.output import (
+    is_interactive,
     is_json_mode,
     output_model,
     print_error,
@@ -102,8 +103,8 @@ async def _wallet_balance(skip_sync: bool) -> None:
     ),
 )
 def wallet_send(
-    amount: Annotated[int, typer.Argument(help="Amount to send in satoshis.")],
-    address: Annotated[str, typer.Argument(help="Destination Bitcoin address.")],
+    amount: Annotated[int | None, typer.Argument(help="Amount to send in satoshis.")] = None,
+    address: Annotated[str | None, typer.Argument(help="Destination Bitcoin address.")] = None,
     fee_rate: Annotated[
         int | None,
         typer.Option("--fee-rate", help="Fee rate in sat/vbyte (integer). Uses node default if omitted."),
@@ -114,6 +115,22 @@ def wallet_send(
     ] = False,
 ) -> None:
     """Send on-chain BTC."""
+    wizard = is_interactive()
+
+    if amount is None:
+        if wizard:
+            amount = typer.prompt("Amount to send (satoshis)", type=int)
+        else:
+            print_error("AMOUNT argument is required in non-interactive mode.")
+            raise typer.Exit(1)
+
+    if address is None:
+        if wizard:
+            address = typer.prompt("Destination Bitcoin address")
+        else:
+            print_error("ADDRESS argument is required in non-interactive mode.")
+            raise typer.Exit(1)
+
     asyncio.run(_wallet_send(amount, address, fee_rate, skip_sync))
 
 
@@ -295,7 +312,7 @@ async def _wallet_transactions(skip_sync: bool) -> None:
     ),
 )
 def wallet_backup(
-    path: Annotated[str, typer.Argument(help="Destination path for the backup archive.")],
+    path: Annotated[str | None, typer.Argument(help="Destination path for the backup archive.")] = None,
     password: Annotated[
         str | None,
         typer.Option(
@@ -307,6 +324,15 @@ def wallet_backup(
     ] = None,
 ) -> None:
     """Backup node wallet data."""
+    wizard = is_interactive()
+
+    if path is None:
+        if wizard:
+            path = typer.prompt("Destination path for the backup archive")
+        else:
+            print_error("PATH argument is required in non-interactive mode.")
+            raise typer.Exit(1)
+
     if password is None:
         password = typer.prompt("Backup password", hide_input=True, confirmation_prompt=True)
     asyncio.run(_wallet_backup(path, password))

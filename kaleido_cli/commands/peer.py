@@ -14,6 +14,7 @@ from kaleido_sdk.rln import (
 
 from kaleido_cli.context import get_client
 from kaleido_cli.output import (
+    is_interactive,
     is_json_mode,
     print_error,
     print_json,
@@ -59,11 +60,18 @@ async def _peer_list() -> None:
 )
 def peer_connect(
     peer: Annotated[
-        str,
+        str | None,
         typer.Argument(help="Peer address in [green]pubkey@host:port[/green] format."),
-    ],
+    ] = None,
 ) -> None:
     """Connect to a peer."""
+    if peer is None:
+        if is_interactive():
+            peer = typer.prompt("Peer (pubkey@host:port)")
+        else:
+            print_error("PEER argument is required in non-interactive mode.")
+            raise typer.Exit(1)
+
     asyncio.run(_peer_connect(peer))
 
 
@@ -82,9 +90,19 @@ async def _peer_connect(peer: str) -> None:
     epilog="  [cyan]kaleido peer disconnect 03abc...def[/cyan]   Use 'kaleido peer list' to find pubkeys.",
 )
 def peer_disconnect(
-    pubkey: Annotated[str, typer.Argument(help="Full pubkey of the peer to disconnect.")],
+    pubkey: Annotated[
+        str | None,
+        typer.Argument(help="Full pubkey of the peer to disconnect."),
+    ] = None,
 ) -> None:
     """Disconnect from a peer."""
+    if pubkey is None:
+        if is_interactive():
+            pubkey = typer.prompt("Peer pubkey (from 'kaleido peer list')")
+        else:
+            print_error("PUBKEY argument is required in non-interactive mode.")
+            raise typer.Exit(1)
+
     asyncio.run(_peer_disconnect(pubkey))
 
 

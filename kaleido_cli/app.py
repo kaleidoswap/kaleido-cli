@@ -9,7 +9,7 @@ import typer
 from .config import load_config
 from .context import state
 from .onboarding import SetupMode, run_setup
-from .output import set_json_mode
+from .output import set_agent_mode, set_json_mode
 
 # ---------------------------------------------------------------------------
 # Root app
@@ -23,7 +23,8 @@ app = typer.Typer(
         "  [cyan]kaleido setup[/cyan]               Guided setup for market-only or local-node use\n\n"
         "[bold]Global flags[/bold] can be placed before any sub-command:\n\n"
         "  [cyan]kaleido --node-url http://localhost:3001 wallet balance[/cyan]\n"
-        "  [cyan]kaleido --json market pairs[/cyan]\n\n"
+        "  [cyan]kaleido --json market pairs[/cyan]\n"
+        "  [cyan]kaleido --agent channel open --peer 03ab...@host:9735 --capacity 100000[/cyan]\n\n"
         "[bold]Environment variables[/bold]\n\n"
         "  [green]KALEIDO_NODE_URL[/green]  RLN node URL (overrides config)\n"
         "  [green]KALEIDO_API_URL[/green]   Kaleidoswap API URL (overrides config)\n"
@@ -38,6 +39,13 @@ app = typer.Typer(
 def _root(
     json_output: Annotated[
         bool, typer.Option("--json", help="Output raw JSON instead of formatted tables.")
+    ] = False,
+    agent: Annotated[
+        bool,
+        typer.Option(
+            "--agent",
+            help="Non-interactive mode for scripted/agent use — skips wizard prompts.",
+        ),
     ] = False,
     node_url: Annotated[
         str | None,
@@ -62,6 +70,7 @@ def _root(
     state.node_url = node_url
     state.api_url = api_url
     set_json_mode(json_output)
+    set_agent_mode(agent)
 
 
 @app.command(
