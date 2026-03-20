@@ -96,6 +96,9 @@ def swap_quote(
         else:
             print_error("Provide --from-amount or --to-amount in non-interactive mode.")
             raise typer.Exit(1)
+    elif from_amount is not None and to_amount is not None:
+        print_error("Provide exactly one of --from-amount or --to-amount.")
+        raise typer.Exit(1)
 
     asyncio.run(_swap_quote(resolved_pair, from_amount, to_amount, from_layer, to_layer))
 
@@ -198,16 +201,20 @@ async def _swap_history(status: str | None, limit: int) -> None:
 )
 def swap_status(
     order_id: Annotated[str, typer.Argument(help="Full swap order ID to look up.")],
+    access_token: Annotated[
+        str,
+        typer.Option("--access-token", help="Optional access token returned for the swap order."),
+    ] = "",
 ) -> None:
     """Check the status of a swap order."""
-    asyncio.run(_swap_status(order_id))
+    asyncio.run(_swap_status(order_id, access_token))
 
 
-async def _swap_status(order_id: str) -> None:
+async def _swap_status(order_id: str, access_token: str) -> None:
     try:
         client = get_client()
         resp: SwapOrderStatusResponse = await client.maker.get_swap_order_status(
-            SwapOrderStatusRequest(order_id=order_id)
+            SwapOrderStatusRequest(order_id=order_id, access_token=access_token)
         )
         if is_json_mode():
             print_json(resp.model_dump())

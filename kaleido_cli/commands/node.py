@@ -52,6 +52,13 @@ node_app = typer.Typer(
     ),
 )
 
+DEFAULT_BITCOIND_USER = "user"
+DEFAULT_BITCOIND_PASS = "password"
+DEFAULT_BITCOIND_HOST = "regtest-bitcoind.rgbtools.org"
+DEFAULT_BITCOIND_PORT = 80
+DEFAULT_INDEXER_URL = "electrum.rgbtools.org:50041"
+DEFAULT_PROXY_ENDPOINT = "rpcs://proxy.iriswallet.com/0.2/json-rpc"
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -488,6 +495,10 @@ def node_init(
             hide_input=True,
         ),
     ] = None,
+    mnemonic: Annotated[
+        str | None,
+        typer.Option("--mnemonic", help="Optional mnemonic phrase to restore during init."),
+    ] = None,
 ) -> None:
     """Initialize a new node wallet (run once after first start)."""
     resolved_password: str
@@ -495,15 +506,17 @@ def node_init(
         resolved_password = password
     else:
         resolved_password = typer.prompt("Wallet password", hide_input=True, confirmation_prompt=True)
-    asyncio.run(_node_init(resolved_password))
+    asyncio.run(_node_init(resolved_password, mnemonic))
 
 
-async def _node_init(password: str) -> None:
+async def _node_init(password: str, mnemonic: str | None) -> None:
     from kaleido_sdk.rln import InitRequest
 
     try:
         client = get_client(require_node=True)
-        response = await client.rln.init_wallet(InitRequest(password=password))
+        response = await client.rln.init_wallet(
+            InitRequest(password=password, mnemonic=mnemonic)
+        )
         print_success("Wallet initialized.")
         output_model(response, title="Init Response")
     except Exception as e:
@@ -546,27 +559,27 @@ def node_unlock(
             help="bitcoind RPC password.",
             hide_input=True,
         ),
-    ] = "password",
+    ] = DEFAULT_BITCOIND_PASS,
     bitcoind_user: Annotated[
         str,
         typer.Option("--bitcoind-user", help="bitcoind RPC username."),
-    ] = "user",
+    ] = DEFAULT_BITCOIND_USER,
     bitcoind_host: Annotated[
         str,
         typer.Option("--bitcoind-host", help="bitcoind RPC host."),
-    ] = "regtest-bitcoind.rgbtools.org",
+    ] = DEFAULT_BITCOIND_HOST,
     bitcoind_port: Annotated[
         int,
         typer.Option("--bitcoind-port", help="bitcoind RPC port."),
-    ] = 80,
+    ] = DEFAULT_BITCOIND_PORT,
     indexer_url: Annotated[
         str,
         typer.Option("--indexer-url", help="Electrs indexer URL."),
-    ] = "electrum.rgbtools.org:50041",
+    ] = DEFAULT_INDEXER_URL,
     proxy_endpoint: Annotated[
         str,
         typer.Option("--proxy-endpoint", help="RGB proxy endpoint."),
-    ] = "rpcs://proxy.iriswallet.com/0.2/json-rpc",
+    ] = DEFAULT_PROXY_ENDPOINT,
     announce_alias: Annotated[
         str,
         typer.Option("--announce-alias", help="Lightning peer alias to announce."),
@@ -597,6 +610,13 @@ def node_unlock(
             bitcoind_port = typer.prompt("bitcoind RPC port", default=bitcoind_port, type=int)
             indexer_url = typer.prompt("Electrs indexer URL", default=indexer_url)
             proxy_endpoint = typer.prompt("RGB proxy endpoint", default=proxy_endpoint)
+        else:
+            bitcoind_user = DEFAULT_BITCOIND_USER
+            bitcoind_pass = DEFAULT_BITCOIND_PASS
+            bitcoind_host = DEFAULT_BITCOIND_HOST
+            bitcoind_port = DEFAULT_BITCOIND_PORT
+            indexer_url = DEFAULT_INDEXER_URL
+            proxy_endpoint = DEFAULT_PROXY_ENDPOINT
         raw = typer.prompt("[OPTIONAL] Lightning announce alias (Enter to skip)", default="")
         if raw.strip():
             announce_alias = raw.strip()

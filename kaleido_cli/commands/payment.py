@@ -84,6 +84,9 @@ def payment_invoice(
     ] = None,
 ) -> None:
     """Create a Lightning invoice (BOLT11)."""
+    if asset_amount is not None and asset_id is None:
+        print_error("--asset-amount requires --asset-id.")
+        raise typer.Exit(1)
     asyncio.run(_payment_invoice(amount_msat, expiry, asset_id, asset_amount))
 
 
@@ -127,6 +130,14 @@ def payment_send(
         int | None,
         typer.Option("--amount-msat", help="Amount in msat. Required for zero-amount invoices."),
     ] = None,
+    asset_id: Annotated[
+        str | None,
+        typer.Option("--asset-id", help="RGB asset ID for RGB+LN payments."),
+    ] = None,
+    asset_amount: Annotated[
+        int | None,
+        typer.Option("--asset-amount", help="RGB asset amount for RGB+LN payments."),
+    ] = None,
 ) -> None:
     """Send a Lightning payment."""
     resolved_invoice: str
@@ -138,13 +149,27 @@ def payment_send(
         print_error("INVOICE argument is required in non-interactive mode.")
         raise typer.Exit(1)
 
-    asyncio.run(_payment_send(resolved_invoice, amount_msat))
+    if asset_amount is not None and asset_id is None:
+        print_error("--asset-amount requires --asset-id.")
+        raise typer.Exit(1)
+
+    asyncio.run(_payment_send(resolved_invoice, amount_msat, asset_id, asset_amount))
 
 
-async def _payment_send(invoice: str, amount_msat: int | None) -> None:
+async def _payment_send(
+    invoice: str,
+    amount_msat: int | None,
+    asset_id: str | None,
+    asset_amount: int | None,
+) -> None:
     try:
         client = get_client(require_node=True)
-        body = SendPaymentRequest(invoice=invoice, amt_msat=amount_msat)
+        body = SendPaymentRequest(
+            invoice=invoice,
+            amt_msat=amount_msat,
+            asset_id=asset_id,
+            asset_amount=asset_amount,
+        )
         resp: SendPaymentResponse = await client.rln.send_payment(body)
         if is_json_mode():
             print_json(resp.model_dump())

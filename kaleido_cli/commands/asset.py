@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from typing import Annotated
 
 import typer
@@ -25,6 +26,7 @@ from kaleido_sdk.rln import (
     RgbInvoiceResponse,
     SendRgbRequest,
     SendRgbResponse,
+    WitnessData,
 )
 
 from kaleido_cli.context import get_client
@@ -281,12 +283,16 @@ async def _issue_cfa(
 ) -> None:
     try:
         client = get_client(require_node=True)
+        file_digest: str | None = None
+        if file_path:
+            with open(file_path, "rb") as f:
+                file_digest = hashlib.sha256(f.read()).hexdigest()
         body = IssueAssetCFARequest(
             name=name,
             amounts=[supply],
             precision=precision,
             details=description,
-            file_digest=file_path,
+            file_digest=file_digest,
         )
         resp: IssueAssetCFAResponse = await client.rln.issue_asset_cfa(body)
         if is_json_mode():
@@ -375,7 +381,9 @@ async def _asset_invoice(
         resp: RgbInvoiceResponse = await client.rln.create_rgb_invoice(
             RgbInvoiceRequest(
                 asset_id=asset_id,
-                assignment=(AssignmentFungible(type="Fungible", value=amount) if amount else None),
+                assignment=(
+                    AssignmentFungible(type="Fungible", value=amount) if amount is not None else None
+                ),
                 min_confirmations=min_confirmations,
                 duration_seconds=duration_seconds,
                 witness=witness,
@@ -429,6 +437,21 @@ def asset_send(
             help="Mark this transfer as a donation.",
         ),
     ] = False,
+    transport_endpoints: Annotated[
+        list[str],
+        typer.Option(
+            "--transport-endpoint",
+            help="Transport endpoint(s) for the recipient; can be repeated.",
+        ),
+    ] = [],
+    witness_amount_sat: Annotated[
+        int | None,
+        typer.Option("--witness-amount-sat", help="Optional witness UTXO amount in satoshis."),
+    ] = None,
+    witness_blinding: Annotated[
+        int | None,
+        typer.Option("--witness-blinding", help="Optional witness blinding factor."),
+    ] = None,
     skip_sync: Annotated[
         bool,
         typer.Option(
@@ -466,7 +489,18 @@ def asset_send(
         raise typer.Exit(1)
 
     asyncio.run(
-        _asset_send(resolved_asset_id, resolved_amount, resolved_invoice, fee_rate, min_confirmations, donation, skip_sync)
+        _asset_send(
+            resolved_asset_id,
+            resolved_amount,
+            resolved_invoice,
+            fee_rate,
+            min_confirmations,
+            donation,
+            transport_endpoints,
+            witness_amount_sat,
+            witness_blinding,
+            skip_sync,
+        )
     )
 
 
@@ -477,17 +511,24 @@ async def _asset_send(
     fee_rate: int,
     min_confirmations: int,
     donation: bool,
+    transport_endpoints: list[str],
+    witness_amount_sat: int | None,
+    witness_blinding: int | None,
     skip_sync: bool,
 ) -> None:
     try:
         client = get_client(require_node=True)
+        witness_data = None
+        if witness_amount_sat is not None:
+            witness_data = WitnessData(amount_sat=witness_amount_sat, blinding=witness_blinding)
         body = SendRgbRequest(
             recipient_map={
                 asset_id: [
                     Recipient(
                         recipient_id=invoice,
+                        witness_data=witness_data,
                         assignment=AssignmentFungible(type="Fungible", value=amount),
-                        transport_endpoints=[],
+                        transport_endpoints=transport_endpoints,
                     )
                 ]
             },
@@ -552,26 +593,9 @@ async def _asset_send_batch(json_file: str) -> None:
 
         client = get_client(require_node=True)
 
-        # Parse recipient_map to ensure proper types
         recipient_map = {}
         for asset_id, recipients in data.get("recipient_map", {}).items():
-            recipient_list = []
-            for r in recipients:
-                assignment_data = r["assignment"]
-                if assignment_data["type"] == "Fungible":
-                    assignment = AssignmentFungible(type="Fungible", value=assignment_data["value"])
-                else:
-                    # Handle other assignment types if needed
-                    assignment = assignment_data
-
-                recipient_list.append(
-                    Recipient(
-                        recipient_id=r["recipient_id"],
-                        assignment=assignment,
-                        transport_endpoints=r.get("transport_endpoints", []),
-                    )
-                )
-            recipient_map[asset_id] = recipient_list
+            recipient_map[asset_id] = [Recipient.model_validate(recipient) for recipient in recipients]
 
         body = SendRgbRequest(
             recipient_map=recipient_map,

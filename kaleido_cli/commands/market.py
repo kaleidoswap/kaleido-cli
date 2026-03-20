@@ -149,6 +149,9 @@ def market_quote(
         else:
             print_error("Provide --from-amount or --to-amount in non-interactive mode.")
             raise typer.Exit(1)
+    elif from_amount is not None and to_amount is not None:
+        print_error("Provide exactly one of --from-amount or --to-amount.")
+        raise typer.Exit(1)
 
     asyncio.run(_market_quote(resolved_pair, from_amount, to_amount, from_layer, to_layer))
 

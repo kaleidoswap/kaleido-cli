@@ -119,6 +119,13 @@ def channel_open(
         int | None,
         typer.Option("--asset-amount", help="Amount of RGB asset to place in the channel."),
     ] = None,
+    push_asset_amount: Annotated[
+        int | None,
+        typer.Option(
+            "--push-asset-amount",
+            help="RGB asset amount to push to the remote side when opening the channel.",
+        ),
+    ] = None,
     public: Annotated[
         bool,
         typer.Option(
@@ -126,8 +133,34 @@ def channel_open(
             help="Announce the channel publicly (default) or keep it private.",
         ),
     ] = True,
+    with_anchors: Annotated[
+        bool,
+        typer.Option(
+            "--with-anchors/--without-anchors",
+            help="Enable or disable anchor outputs for the channel.",
+        ),
+    ] = False,
+    fee_base_msat: Annotated[
+        int | None,
+        typer.Option("--fee-base-msat", help="Optional base routing fee for the channel."),
+    ] = None,
+    fee_proportional_millionths: Annotated[
+        int | None,
+        typer.Option(
+            "--fee-proportional-millionths",
+            help="Optional proportional routing fee for the channel.",
+        ),
+    ] = None,
+    temporary_channel_id: Annotated[
+        str | None,
+        typer.Option("--temporary-channel-id", help="Optional temporary channel ID override."),
+    ] = None,
 ) -> None:
     """Open a Lightning channel to a peer."""
+    if (asset_amount is not None or push_asset_amount is not None) and asset_id is None:
+        print_error("--asset-amount and --push-asset-amount require --asset-id.")
+        raise typer.Exit(1)
+
     resolved_peer: str
     if peer is not None:
         resolved_peer = peer
@@ -164,7 +197,22 @@ def channel_open(
             print_error("Peer must be in pubkey@host:port format in non-interactive mode.")
             raise typer.Exit(1)
 
-    asyncio.run(_channel_open(pubkey, addr, resolved_capacity, push_msat, asset_id, asset_amount, public))
+    asyncio.run(
+        _channel_open(
+            pubkey,
+            addr,
+            resolved_capacity,
+            push_msat,
+            asset_id,
+            asset_amount,
+            push_asset_amount,
+            public,
+            with_anchors,
+            fee_base_msat,
+            fee_proportional_millionths,
+            temporary_channel_id,
+        )
+    )
 
 
 async def _channel_open(
@@ -174,7 +222,12 @@ async def _channel_open(
     push_msat: int,
     asset_id: str | None,
     asset_amount: int | None,
+    push_asset_amount: int | None,
     public: bool,
+    with_anchors: bool,
+    fee_base_msat: int | None,
+    fee_proportional_millionths: int | None,
+    temporary_channel_id: str | None,
 ) -> None:
     try:
         client = get_client(require_node=True)
@@ -184,8 +237,12 @@ async def _channel_open(
             push_msat=push_msat,
             asset_id=asset_id,
             asset_amount=asset_amount,
+            push_asset_amount=push_asset_amount,
             public=public,
-            with_anchors=False,
+            with_anchors=with_anchors,
+            fee_base_msat=fee_base_msat,
+            fee_proportional_millionths=fee_proportional_millionths,
+            temporary_channel_id=temporary_channel_id,
         )
         resp: OpenChannelResponse = await client.rln.open_channel(body)
         if is_json_mode():
@@ -310,8 +367,8 @@ def channel_order_create(
     ] = 144,
     channel_expiry_blocks: Annotated[
         int,
-        typer.Option("--expiry-blocks", help="Channel expiry in blocks (0 = no expiry)."),
-    ] = 0,
+        typer.Option("--expiry-blocks", help="Channel expiry in blocks (must be at least 1)."),
+    ] = 1,
     token: Annotated[str | None, typer.Option("--token", help="Authentication token.")] = None,
     refund_onchain_address: Annotated[
         str | None,
@@ -340,6 +397,10 @@ def channel_order_create(
     email: Annotated[str | None, typer.Option("--email", help="Contact email.")] = None,
 ) -> None:
     """Create an LSP channel order."""
+    if (lsp_asset_amount is not None or client_asset_amount is not None) and asset_id is None:
+        print_error("--lsp-asset-amount and --client-asset-amount require --asset-id.")
+        raise typer.Exit(1)
+
     resolved_client_pubkey: str
     if client_pubkey is not None:
         resolved_client_pubkey = client_pubkey
@@ -442,16 +503,20 @@ async def _channel_order_create(
 )
 def channel_order_get(
     order_id: Annotated[str, typer.Argument(help="LSP order ID.")],
+    access_token: Annotated[
+        str,
+        typer.Option("--access-token", help="Optional access token returned for the order."),
+    ] = "",
 ) -> None:
     """Get the status and details of an LSP channel order."""
-    asyncio.run(_channel_order_get(order_id))
+    asyncio.run(_channel_order_get(order_id, access_token))
 
 
-async def _channel_order_get(order_id: str) -> None:
+async def _channel_order_get(order_id: str, access_token: str) -> None:
     try:
         client = get_client()
         resp: ChannelOrderResponse = await client.maker.get_lsp_order(
-            OrderRequest(order_id=order_id)
+            OrderRequest(order_id=order_id, access_token=access_token)
         )
         if is_json_mode():
             print_json(resp.model_dump())
@@ -476,6 +541,10 @@ def channel_order_decide(
     order_id: Annotated[str | None, typer.Argument(help="LSP order ID.")] = None,
     accept: Annotated[bool, typer.Option("--accept", help="Accept the order.")] = False,
     reject: Annotated[bool, typer.Option("--reject", help="Reject the order.")] = False,
+    access_token: Annotated[
+        str,
+        typer.Option("--access-token", help="Optional access token returned for the order."),
+    ] = "",
 ) -> None:
     """Submit a rate decision for an LSP channel order."""
     resolved_order_id: str
@@ -494,13 +563,17 @@ def channel_order_decide(
         print_error("Must specify exactly one of --accept or --reject")
         raise typer.Exit(1)
 
-    asyncio.run(_channel_order_decide(resolved_order_id, accept))
+    asyncio.run(_channel_order_decide(resolved_order_id, accept, access_token))
 
 
-async def _channel_order_decide(order_id: str, accept: bool) -> None:
+async def _channel_order_decide(order_id: str, accept: bool, access_token: str) -> None:
     try:
         client = get_client()
-        body = RateDecisionRequest(order_id=order_id, accept_new_rate=accept)
+        body = RateDecisionRequest(
+            order_id=order_id,
+            access_token=access_token,
+            accept_new_rate=accept,
+        )
         resp: RateDecisionResponse = await client.maker.submit_lsp_rate_decision(body)
         if is_json_mode():
             print_json(resp.model_dump())
@@ -556,14 +629,28 @@ def channel_estimate_fees(
     ] = 144,
     channel_expiry_blocks: Annotated[
         int,
-        typer.Option("--expiry-blocks", help="Channel expiry in blocks (0 = no expiry)."),
-    ] = 0,
+        typer.Option("--expiry-blocks", help="Channel expiry in blocks (must be at least 1)."),
+    ] = 1,
+    token: Annotated[str | None, typer.Option("--token", help="Authentication token.")] = None,
+    refund_onchain_address: Annotated[
+        str | None,
+        typer.Option("--refund-address", help="Bitcoin address for refunds."),
+    ] = None,
     announce_channel: Annotated[
         bool,
         typer.Option("--announce/--private", help="Announce channel publicly."),
     ] = True,
+    rfq_id: Annotated[
+        str | None,
+        typer.Option("--rfq-id", help="Request for quote ID."),
+    ] = None,
+    email: Annotated[str | None, typer.Option("--email", help="Contact email.")] = None,
 ) -> None:
     """Estimate fees for opening an LSP channel."""
+    if (lsp_asset_amount is not None or client_asset_amount is not None) and asset_id is None:
+        print_error("--lsp-asset-amount and --client-asset-amount require --asset-id.")
+        raise typer.Exit(1)
+
     resolved_client_pubkey: str
     if client_pubkey is not None:
         resolved_client_pubkey = client_pubkey
@@ -602,7 +689,11 @@ def channel_estimate_fees(
             required_channel_confirmations,
             funding_confirms_within_blocks,
             channel_expiry_blocks,
+            token,
+            refund_onchain_address,
             announce_channel,
+            rfq_id,
+            email,
         )
     )
 
@@ -617,7 +708,11 @@ async def _channel_estimate_fees(
     required_channel_confirmations: int,
     funding_confirms_within_blocks: int,
     channel_expiry_blocks: int,
+    token: str | None,
+    refund_onchain_address: str | None,
     announce_channel: bool,
+    rfq_id: str | None,
+    email: str | None,
 ) -> None:
     try:
         client = get_client()
@@ -628,10 +723,14 @@ async def _channel_estimate_fees(
             required_channel_confirmations=required_channel_confirmations,
             funding_confirms_within_blocks=funding_confirms_within_blocks,
             channel_expiry_blocks=channel_expiry_blocks,
+            token=token,
+            refund_onchain_address=refund_onchain_address,
             asset_id=asset_id,
             lsp_asset_amount=lsp_asset_amount,
             client_asset_amount=client_asset_amount,
             announce_channel=announce_channel,
+            rfq_id=rfq_id,
+            email=email,
         )
         resp: ChannelFees = await client.maker.estimate_lsp_fees(body)
         if is_json_mode():
