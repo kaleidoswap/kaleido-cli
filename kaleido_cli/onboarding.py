@@ -118,12 +118,13 @@ def run_setup(
                 use_defaults=defaults,
             )
             base_dir = Path(base_dir_input).expanduser().resolve()
-            created_env_name = _value_or_prompt(
+            resolved_env_name: str = _value_or_prompt(
                 env_name,
                 "Environment name",
                 "default",
                 use_defaults=defaults,
             )
+            created_env_name = resolved_env_name
             count = _value_or_prompt(
                 node_count,
                 "How many RGB Lightning Nodes?",
@@ -137,16 +138,16 @@ def run_setup(
                 True,
                 use_defaults=defaults,
             )
-            env_dir = base_dir / created_env_name
+            env_dir = base_dir / resolved_env_name
             if (env_dir / "docker-compose.yml").exists():
                 if defaults:
                     print_error(
-                        f"Environment '{created_env_name}' already exists at {env_dir}. "
+                        f"Environment '{resolved_env_name}' already exists at {env_dir}. "
                         "Choose a different --env-name or reuse it with 'kaleido node use'."
                     )
                     raise typer.Exit(1)
                 overwrite = typer.confirm(
-                    f"Environment '{created_env_name}' already exists at {env_dir}. Overwrite?",
+                    f"Environment '{resolved_env_name}' already exists at {env_dir}. Overwrite?",
                     default=False,
                 )
                 if not overwrite:
@@ -158,7 +159,7 @@ def run_setup(
 
             manager = SpawnManager(
                 SpawnConfig(
-                    name=created_env_name,
+                    name=resolved_env_name,
                     count=count,
                     network=config.network,
                     disable_authentication=True,
@@ -195,10 +196,10 @@ def run_setup(
         if created_env_name and created_env_started:
             print_panel(
                 "Next Steps",
-                f"1. kaleido node init\n"
-                f"2. kaleido node unlock\n"
-                f"3. kaleido node status\n"
-                f"4. kaleido wallet address",
+                "1. kaleido node init\n"
+                "2. kaleido node unlock\n"
+                "3. kaleido node status\n"
+                "4. kaleido wallet address",
                 style="green",
             )
         elif created_env_name:
@@ -213,9 +214,7 @@ def run_setup(
         else:
             print_panel(
                 "Next Steps",
-                "1. kaleido node status\n"
-                "2. kaleido node unlock\n"
-                "3. kaleido wallet balance",
+                "1. kaleido node status\n2. kaleido node unlock\n3. kaleido wallet balance",
                 style="green",
             )
     else:

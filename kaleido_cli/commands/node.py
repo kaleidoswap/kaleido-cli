@@ -19,6 +19,7 @@ from kaleido_cli.docker_manager import (
     list_spawn_names,
 )
 from kaleido_cli.output import (
+    is_interactive,
     output_model,
     print_error,
     print_info,
@@ -50,6 +51,13 @@ node_app = typer.Typer(
         "  [cyan]kaleido node status[/cyan]           — check node reachability\n"
     ),
 )
+
+DEFAULT_BITCOIND_USER = "user"
+DEFAULT_BITCOIND_PASS = "password"
+DEFAULT_BITCOIND_HOST = "regtest-bitcoind.rgbtools.org"
+DEFAULT_BITCOIND_PORT = 80
+DEFAULT_INDEXER_URL = "electrum.rgbtools.org:50041"
+DEFAULT_PROXY_ENDPOINT = "rpcs://proxy.iriswallet.com/0.2/json-rpc"
 
 
 # ---------------------------------------------------------------------------
@@ -127,18 +135,21 @@ def node_create(
         print_info(f"  Saved spawn-dir → {base}")
 
     # ── Environment name ─────────────────────────────────────────────────────
-    if not name:
+    resolved_name: str
+    if name:
+        resolved_name = name
+    else:
         existing = list_spawn_names(base)
         if existing:
             print_info(
                 "  Existing environments: " + ", ".join(f"[bold]{n}[/bold]" for n in existing)
             )
-        name = typer.prompt("  Environment name", default="default")
+        resolved_name = typer.prompt("  Environment name", default="default")
 
-    env_dir = base / name
+    env_dir = base / resolved_name
     if (env_dir / "docker-compose.yml").exists():
         overwrite = typer.confirm(
-            f"  Environment '{name}' already exists at {env_dir}. Overwrite?",
+            f"  Environment '{resolved_name}' already exists at {env_dir}. Overwrite?",
             default=False,
         )
         if not overwrite:
@@ -169,7 +180,7 @@ def node_create(
     # ── Summary ───────────────────────────────────────────────────────────────
     print_info("")
     print_info("  ── Summary ───────────────────────────────────────────")
-    print_info(f"  Name       : [bold]{name}[/bold]")
+    print_info(f"  Name       : [bold]{resolved_name}[/bold]")
     print_info(f"  Directory  : {env_dir}")
     print_info(f"  Nodes      : {count}")
     print_info(f"  Network    : {network}")
@@ -181,7 +192,7 @@ def node_create(
 
     # ── Generate + optionally start ───────────────────────────────────────────
     cfg = SpawnConfig(
-        name=name,
+        name=resolved_name,
         count=count,
         network=network,
         disable_authentication=True,
@@ -196,15 +207,15 @@ def node_create(
     if rc == 0:
         if not start_now:
             print_info(f"\n  Compose file written → {env_dir}")
-            print_info(f"  Start with: [cyan]kaleido node up {name}[/cyan]")
+            print_info(f"  Start with: [cyan]kaleido node up {resolved_name}[/cyan]")
         else:
-            print_success(f"  Environment '{name}' started ({count} node(s)).")
+            print_success(f"  Environment '{resolved_name}' started ({count} node(s)).")
             print_info("")
             for i, url in enumerate(manager.node_urls(), start=1):
                 print_info(f"  Node {i} API : {url}")
             print_info("")
             print_info("  Next steps:")
-            print_info(f"  1. [cyan]kaleido node use {name}[/cyan]")
+            print_info(f"  1. [cyan]kaleido node use {resolved_name}[/cyan]")
             print_info("  2. [cyan]kaleido node init[/cyan]")
             print_info("  3. [cyan]kaleido node unlock[/cyan]")
     raise typer.Exit(rc)
@@ -484,19 +495,28 @@ def node_init(
             hide_input=True,
         ),
     ] = None,
+    mnemonic: Annotated[
+        str | None,
+        typer.Option("--mnemonic", help="Optional mnemonic phrase to restore during init."),
+    ] = None,
 ) -> None:
     """Initialize a new node wallet (run once after first start)."""
-    if password is None:
-        password = typer.prompt("Wallet password", hide_input=True, confirmation_prompt=True)
-    asyncio.run(_node_init(password))
+    resolved_password: str
+    if password is not None:
+        resolved_password = password
+    else:
+        resolved_password = typer.prompt("Wallet password", hide_input=True, confirmation_prompt=True)
+    asyncio.run(_node_init(resolved_password, mnemonic))
 
 
-async def _node_init(password: str) -> None:
-    from kaleidoswap_sdk.rln import InitRequest
+async def _node_init(password: str, mnemonic: str | None) -> None:
+    from kaleido_sdk.rln import InitRequest
 
     try:
         client = get_client(require_node=True)
-        response = await client.rln.init_wallet(InitRequest(password=password))
+        response = await client.rln.init_wallet(
+            InitRequest(password=password, mnemonic=mnemonic)
+        )
         print_success("Wallet initialized.")
         output_model(response, title="Init Response")
     except Exception as e:
@@ -533,71 +553,80 @@ def node_unlock(
         ),
     ] = None,
     bitcoind_pass: Annotated[
-        str | None,
+        str,
         typer.Option(
             "--bitcoind-pass",
-            help="bitcoind RPC password (default: password).",
+            help="bitcoind RPC password.",
             hide_input=True,
         ),
-    ] = None,
+    ] = DEFAULT_BITCOIND_PASS,
     bitcoind_user: Annotated[
-        str | None,
-        typer.Option("--bitcoind-user", help="bitcoind RPC username (default: user)."),
-    ] = None,
+        str,
+        typer.Option("--bitcoind-user", help="bitcoind RPC username."),
+    ] = DEFAULT_BITCOIND_USER,
     bitcoind_host: Annotated[
-        str | None,
-        typer.Option(
-            "--bitcoind-host",
-            help="bitcoind RPC host (default: regtest-bitcoind.rgbtools.org).",
-        ),
-    ] = None,
+        str,
+        typer.Option("--bitcoind-host", help="bitcoind RPC host."),
+    ] = DEFAULT_BITCOIND_HOST,
     bitcoind_port: Annotated[
-        int | None,
-        typer.Option("--bitcoind-port", help="bitcoind RPC port (default: 80)."),
-    ] = None,
+        int,
+        typer.Option("--bitcoind-port", help="bitcoind RPC port."),
+    ] = DEFAULT_BITCOIND_PORT,
     indexer_url: Annotated[
-        str | None,
-        typer.Option(
-            "--indexer-url",
-            help="Electrs indexer URL (default: electrum.rgbtools.org:50041).",
-        ),
-    ] = None,
+        str,
+        typer.Option("--indexer-url", help="Electrs indexer URL."),
+    ] = DEFAULT_INDEXER_URL,
     proxy_endpoint: Annotated[
-        str | None,
-        typer.Option(
-            "--proxy-endpoint",
-            help="RGB proxy endpoint (default: rpcs://proxy.iriswallet.com/0.2/json-rpc).",
-        ),
-    ] = None,
+        str,
+        typer.Option("--proxy-endpoint", help="RGB proxy endpoint."),
+    ] = DEFAULT_PROXY_ENDPOINT,
     announce_alias: Annotated[
-        str | None,
+        str,
         typer.Option("--announce-alias", help="Lightning peer alias to announce."),
-    ] = None,
+    ] = "",
     announce_address: Annotated[
-        list[str] | None,
+        list[str],
         typer.Option(
             "--announce-address",
             help="Public address(es) for Lightning peer discovery (can be repeated).",
         ),
-    ] = None,
+    ] = [],
 ) -> None:
     """Unlock the node wallet."""
-    if password is None:
-        password = typer.prompt("Wallet password", hide_input=True)
+    resolved_password: str
+    if password is not None:
+        resolved_password = password
+    else:
+        resolved_password = typer.prompt("Wallet password", hide_input=True)
 
-    # Server requires ALL fields — apply defaults for rgbtools.org public services
-    bitcoind_user = bitcoind_user or "user"
-    bitcoind_pass = bitcoind_pass or "password"
-    bitcoind_host = bitcoind_host or "regtest-bitcoind.rgbtools.org"
-    bitcoind_port = bitcoind_port if bitcoind_port is not None else 80
-    indexer_url = indexer_url or "electrum.rgbtools.org:50041"
-    proxy_endpoint = proxy_endpoint or "rpcs://proxy.iriswallet.com/0.2/json-rpc"
-    announce_alias = announce_alias or ""
-    announce_address = announce_address or []
+    if is_interactive():
+        use_defaults = typer.confirm(
+            "Use default rgbtools.org services (bitcoind, indexer, proxy)?", default=True
+        )
+        if not use_defaults:
+            bitcoind_user = typer.prompt("bitcoind RPC username", default=bitcoind_user)
+            bitcoind_pass = typer.prompt("bitcoind RPC password", default=bitcoind_pass, hide_input=True)
+            bitcoind_host = typer.prompt("bitcoind RPC host", default=bitcoind_host)
+            bitcoind_port = typer.prompt("bitcoind RPC port", default=bitcoind_port, type=int)
+            indexer_url = typer.prompt("Electrs indexer URL", default=indexer_url)
+            proxy_endpoint = typer.prompt("RGB proxy endpoint", default=proxy_endpoint)
+        else:
+            bitcoind_user = DEFAULT_BITCOIND_USER
+            bitcoind_pass = DEFAULT_BITCOIND_PASS
+            bitcoind_host = DEFAULT_BITCOIND_HOST
+            bitcoind_port = DEFAULT_BITCOIND_PORT
+            indexer_url = DEFAULT_INDEXER_URL
+            proxy_endpoint = DEFAULT_PROXY_ENDPOINT
+        raw = typer.prompt("[OPTIONAL] Lightning announce alias (Enter to skip)", default="")
+        if raw.strip():
+            announce_alias = raw.strip()
+        raw = typer.prompt("[OPTIONAL] Lightning announce address (Enter to skip)", default="")
+        if raw.strip():
+            announce_address = [raw.strip()]
 
     asyncio.run(
         _node_unlock(
-            password=password,
+            password=resolved_password,
             bitcoind_user=bitcoind_user,
             bitcoind_pass=bitcoind_pass,
             bitcoind_host=bitcoind_host,
@@ -621,7 +650,7 @@ async def _node_unlock(
     announce_alias: str,
     announce_addresses: list[str],
 ) -> None:
-    from kaleidoswap_sdk.rln import UnlockRequest
+    from kaleido_sdk.rln import UnlockRequest
 
     try:
         client = get_client(require_node=True)

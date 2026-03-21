@@ -6,7 +6,7 @@ import asyncio
 from typing import Annotated
 
 import typer
-from kaleidoswap_sdk.rln import (
+from kaleido_sdk.rln import (
     ConnectPeerRequest,
     DisconnectPeerRequest,
     ListPeersResponse,
@@ -14,6 +14,7 @@ from kaleidoswap_sdk.rln import (
 
 from kaleido_cli.context import get_client
 from kaleido_cli.output import (
+    is_interactive,
     is_json_mode,
     print_error,
     print_json,
@@ -59,12 +60,21 @@ async def _peer_list() -> None:
 )
 def peer_connect(
     peer: Annotated[
-        str,
+        str | None,
         typer.Argument(help="Peer address in [green]pubkey@host:port[/green] format."),
-    ],
+    ] = None,
 ) -> None:
     """Connect to a peer."""
-    asyncio.run(_peer_connect(peer))
+    resolved_peer: str
+    if peer is not None:
+        resolved_peer = peer
+    elif is_interactive():
+        resolved_peer = typer.prompt("Peer (pubkey@host:port)")
+    else:
+        print_error("PEER argument is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    asyncio.run(_peer_connect(resolved_peer))
 
 
 async def _peer_connect(peer: str) -> None:
@@ -82,16 +92,28 @@ async def _peer_connect(peer: str) -> None:
     epilog="  [cyan]kaleido peer disconnect 03abc...def[/cyan]   Use 'kaleido peer list' to find pubkeys.",
 )
 def peer_disconnect(
-    pubkey: Annotated[str, typer.Argument(help="Full pubkey of the peer to disconnect.")],
+    pubkey: Annotated[
+        str | None,
+        typer.Argument(help="Full pubkey of the peer to disconnect."),
+    ] = None,
 ) -> None:
     """Disconnect from a peer."""
-    asyncio.run(_peer_disconnect(pubkey))
+    resolved_pubkey: str
+    if pubkey is not None:
+        resolved_pubkey = pubkey
+    elif is_interactive():
+        resolved_pubkey = typer.prompt("Peer pubkey (from 'kaleido peer list')")
+    else:
+        print_error("PUBKEY argument is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    asyncio.run(_peer_disconnect(resolved_pubkey))
 
 
 async def _peer_disconnect(pubkey: str) -> None:
     try:
         client = get_client(require_node=True)
-        await client.rln.disconnect_peer(DisconnectPeerRequest(pubkey=pubkey))
+        await client.rln.disconnect_peer(DisconnectPeerRequest(peer_pubkey=pubkey))
         print_success(f"Disconnected from {pubkey}")
     except Exception as e:
         print_error(f"Error: {e}")

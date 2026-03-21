@@ -6,7 +6,7 @@ import asyncio
 from typing import Annotated
 
 import typer
-from kaleidoswap_sdk.rln import (
+from kaleido_sdk.rln import (
     DecodeLNInvoiceRequest,
     DecodeLNInvoiceResponse,
     DecodeRGBInvoiceRequest,
@@ -24,6 +24,7 @@ from kaleidoswap_sdk.rln import (
 
 from kaleido_cli.context import get_client
 from kaleido_cli.output import (
+    is_interactive,
     is_json_mode,
     output_model,
     print_error,
@@ -63,13 +64,13 @@ def payment_invoice(
         ),
     ] = None,
     expiry: Annotated[
-        int | None,
+        int,
         typer.Option(
             "--expiry",
             "-e",
-            help="Invoice expiry in seconds. Defaults to node setting.",
+            help="Invoice expiry in seconds.",
         ),
-    ] = None,
+    ] = 3600,
     asset_id: Annotated[
         str | None,
         typer.Option(
@@ -83,12 +84,15 @@ def payment_invoice(
     ] = None,
 ) -> None:
     """Create a Lightning invoice (BOLT11)."""
+    if asset_amount is not None and asset_id is None:
+        print_error("--asset-amount requires --asset-id.")
+        raise typer.Exit(1)
     asyncio.run(_payment_invoice(amount_msat, expiry, asset_id, asset_amount))
 
 
 async def _payment_invoice(
     amount_msat: int | None,
-    expiry: int | None,
+    expiry: int,
     asset_id: str | None,
     asset_amount: int | None,
 ) -> None:
@@ -121,20 +125,51 @@ async def _payment_invoice(
     ),
 )
 def payment_send(
-    invoice: Annotated[str, typer.Argument(help="BOLT11 invoice string to pay.")],
+    invoice: Annotated[str | None, typer.Argument(help="BOLT11 invoice string to pay.")] = None,
     amount_msat: Annotated[
         int | None,
         typer.Option("--amount-msat", help="Amount in msat. Required for zero-amount invoices."),
     ] = None,
+    asset_id: Annotated[
+        str | None,
+        typer.Option("--asset-id", help="RGB asset ID for RGB+LN payments."),
+    ] = None,
+    asset_amount: Annotated[
+        int | None,
+        typer.Option("--asset-amount", help="RGB asset amount for RGB+LN payments."),
+    ] = None,
 ) -> None:
     """Send a Lightning payment."""
-    asyncio.run(_payment_send(invoice, amount_msat))
+    resolved_invoice: str
+    if invoice is not None:
+        resolved_invoice = invoice
+    elif is_interactive():
+        resolved_invoice = typer.prompt("BOLT11 invoice")
+    else:
+        print_error("INVOICE argument is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    if asset_amount is not None and asset_id is None:
+        print_error("--asset-amount requires --asset-id.")
+        raise typer.Exit(1)
+
+    asyncio.run(_payment_send(resolved_invoice, amount_msat, asset_id, asset_amount))
 
 
-async def _payment_send(invoice: str, amount_msat: int | None) -> None:
+async def _payment_send(
+    invoice: str,
+    amount_msat: int | None,
+    asset_id: str | None,
+    asset_amount: int | None,
+) -> None:
     try:
         client = get_client(require_node=True)
-        body = SendPaymentRequest(invoice=invoice, amount_msat=amount_msat)
+        body = SendPaymentRequest(
+            invoice=invoice,
+            amt_msat=amount_msat,
+            asset_id=asset_id,
+            asset_amount=asset_amount,
+        )
         resp: SendPaymentResponse = await client.rln.send_payment(body)
         if is_json_mode():
             print_json(resp.model_dump())
@@ -218,14 +253,12 @@ async def _payment_decode(invoice: str) -> None:
         client = get_client(require_node=True)
         # Try BOLT11 first, then RGB
         try:
-            resp: DecodeLNInvoiceResponse = await client.rln.decode_ln_invoice(
-                DecodeLNInvoiceRequest(invoice=invoice)
-            )
+            resp: (
+                DecodeLNInvoiceResponse | DecodeRGBInvoiceResponse
+            ) = await client.rln.decode_ln_invoice(DecodeLNInvoiceRequest(invoice=invoice))
             kind = "Lightning (BOLT11)"
         except Exception:
-            resp: DecodeRGBInvoiceResponse = await client.rln.decode_rgb_invoice(
-                DecodeRGBInvoiceRequest(invoice=invoice)
-            )
+            resp = await client.rln.decode_rgb_invoice(DecodeRGBInvoiceRequest(invoice=invoice))
             kind = "RGB Invoice"
 
         if is_json_mode():

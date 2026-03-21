@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import typer
-from kaleidoswap_sdk import KaleidoClient
+from kaleido_sdk import KaleidoClient
 
 from .config import CliConfig
 from .output import print_error

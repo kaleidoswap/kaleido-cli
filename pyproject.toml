@@ -14,10 +14,11 @@ authors = [
 ]
 keywords = ["bitcoin", "lightning", "rgb", "kaleidoswap", "cli"]
 dependencies = [
-    "kaleidoswap-sdk>=0.5.3",
     "typer>=0.12.0",
+    "shellingham>=1.5",
     "rich>=13.0.0",
     "pyyaml>=6.0.0",
+    "kaleido-sdk==0.1.0",
 ]
 
 [project.scripts]
@@ -36,9 +37,15 @@ Repository = "https://github.com/kaleidoswap/kaleido-cli"
 [tool.hatch.build.targets.wheel]
 packages = ["kaleido_cli"]
 
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.10"
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+exclude = ["install.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]

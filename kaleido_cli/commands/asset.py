@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from typing import Annotated
 
 import typer
-from kaleidoswap_sdk.rln import (
+from kaleido_sdk.rln import (
     AssetBalanceRequest,
     AssetBalanceResponse,
     AssetMetadataRequest,
@@ -25,10 +26,12 @@ from kaleidoswap_sdk.rln import (
     RgbInvoiceResponse,
     SendRgbRequest,
     SendRgbResponse,
+    WitnessData,
 )
 
 from kaleido_cli.context import get_client
 from kaleido_cli.output import (
+    is_interactive,
     is_json_mode,
     output_model,
     print_error,
@@ -140,19 +143,55 @@ async def _asset_metadata(asset_id: str) -> None:
     ),
 )
 def asset_issue_nia(
-    name: Annotated[str, typer.Option("--name", help="Human-readable asset name.")],
-    ticker: Annotated[str, typer.Option("--ticker", help="Short ticker symbol, e.g. USDT.")],
+    name: Annotated[
+        str | None,
+        typer.Option("--name", help="Human-readable asset name."),
+    ] = None,
+    ticker: Annotated[
+        str | None,
+        typer.Option("--ticker", help="Short ticker symbol, e.g. USDT."),
+    ] = None,
     supply: Annotated[
-        int,
+        int | None,
         typer.Option("--supply", help="Total supply expressed in the smallest raw unit."),
-    ],
+    ] = None,
     precision: Annotated[
         int,
         typer.Option("--precision", help="Number of decimal places (0 = whole units)."),
     ] = 0,
 ) -> None:
     """Issue a new NIA (Non-Inflatable Asset) RGB token."""
-    asyncio.run(_issue_nia(name, ticker, supply, precision))
+    resolved_name: str
+    if name is not None:
+        resolved_name = name
+    elif is_interactive():
+        resolved_name = typer.prompt("Asset name")
+    else:
+        print_error("--name is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    resolved_ticker: str
+    if ticker is not None:
+        resolved_ticker = ticker
+    elif is_interactive():
+        resolved_ticker = typer.prompt("Ticker symbol (e.g. USDT)")
+    else:
+        print_error("--ticker is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    resolved_supply: int
+    if supply is not None:
+        resolved_supply = supply
+    elif is_interactive():
+        resolved_supply = typer.prompt("Total supply (raw units)", type=int)
+    else:
+        print_error("--supply is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    if is_interactive():
+        precision = typer.prompt("[OPTIONAL] Decimal places (0 = whole units)", default=0, type=int)
+
+    asyncio.run(_issue_nia(resolved_name, resolved_ticker, resolved_supply, precision))
 
 
 async def _issue_nia(name: str, ticker: str, supply: int, precision: int) -> None:
@@ -183,8 +222,14 @@ async def _issue_nia(name: str, ticker: str, supply: int, precision: int) -> Non
     ),
 )
 def asset_issue_cfa(
-    name: Annotated[str, typer.Option("--name", help="Asset name.")],
-    supply: Annotated[int, typer.Option("--supply", help="Total supply in raw units.")],
+    name: Annotated[
+        str | None,
+        typer.Option("--name", help="Asset name."),
+    ] = None,
+    supply: Annotated[
+        int | None,
+        typer.Option("--supply", help="Total supply in raw units."),
+    ] = None,
     description: Annotated[
         str | None,
         typer.Option("--description", help="Optional description shown in wallets."),
@@ -199,7 +244,34 @@ def asset_issue_cfa(
     ] = 0,
 ) -> None:
     """Issue a new CFA (Collectible Fungible Asset) RGB token."""
-    asyncio.run(_issue_cfa(name, supply, description, file_path, precision))
+    resolved_name: str
+    if name is not None:
+        resolved_name = name
+    elif is_interactive():
+        resolved_name = typer.prompt("Asset name")
+    else:
+        print_error("--name is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    resolved_supply: int
+    if supply is not None:
+        resolved_supply = supply
+    elif is_interactive():
+        resolved_supply = typer.prompt("Total supply (raw units)", type=int)
+    else:
+        print_error("--supply is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    if is_interactive():
+        raw = typer.prompt("[OPTIONAL] Description (Enter to skip)", default="")
+        if raw.strip():
+            description = raw.strip()
+        raw = typer.prompt("[OPTIONAL] Media file path (Enter to skip)", default="")
+        if raw.strip():
+            file_path = raw.strip()
+        precision = typer.prompt("[OPTIONAL] Decimal places (0 = whole units)", default=0, type=int)
+
+    asyncio.run(_issue_cfa(resolved_name, resolved_supply, description, file_path, precision))
 
 
 async def _issue_cfa(
@@ -211,12 +283,16 @@ async def _issue_cfa(
 ) -> None:
     try:
         client = get_client(require_node=True)
+        file_digest: str | None = None
+        if file_path:
+            with open(file_path, "rb") as f:
+                file_digest = hashlib.sha256(f.read()).hexdigest()
         body = IssueAssetCFARequest(
             name=name,
             amounts=[supply],
             precision=precision,
-            description=description,
-            file_path=file_path,
+            details=description,
+            file_digest=file_digest,
         )
         resp: IssueAssetCFAResponse = await client.rln.issue_asset_cfa(body)
         if is_json_mode():
@@ -244,7 +320,7 @@ async def _issue_cfa(
     ),
 )
 def asset_invoice(
-    asset_id: Annotated[str, typer.Argument(help="RGB asset ID to receive.")],
+    asset_id: Annotated[str | None, typer.Argument(help="RGB asset ID to receive.")] = None,
     amount: Annotated[
         int | None,
         typer.Option(
@@ -254,12 +330,12 @@ def asset_invoice(
         ),
     ] = None,
     min_confirmations: Annotated[
-        int | None,
+        int,
         typer.Option(
             "--min-confirmations",
             help="Minimum number of confirmations required for the transfer.",
         ),
-    ] = None,
+    ] = 0,
     duration_seconds: Annotated[
         int | None,
         typer.Option(
@@ -268,30 +344,46 @@ def asset_invoice(
         ),
     ] = None,
     witness: Annotated[
-        bool | None,
+        bool,
         typer.Option(
             "--witness/--no-witness",
-            help="Use witness-based transaction. Default is auto-detect.",
+            help="Use witness-based transaction.",
         ),
-    ] = None,
+    ] = False,
 ) -> None:
     """Create an RGB invoice to receive assets."""
-    asyncio.run(_asset_invoice(asset_id, amount, min_confirmations, duration_seconds, witness))
+    resolved_asset_id: str
+    if asset_id is not None:
+        resolved_asset_id = asset_id
+    elif is_interactive():
+        resolved_asset_id = typer.prompt("RGB asset ID (rgb:...)")
+    else:
+        print_error("ASSET_ID argument is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    if is_interactive() and amount is None:
+        raw = typer.prompt("[OPTIONAL] Amount to request (Enter for any-amount invoice)", default="")
+        if raw.strip():
+            amount = int(raw.strip())
+
+    asyncio.run(_asset_invoice(resolved_asset_id, amount, min_confirmations, duration_seconds, witness))
 
 
 async def _asset_invoice(
     asset_id: str,
     amount: int | None,
-    min_confirmations: int | None,
+    min_confirmations: int,
     duration_seconds: int | None,
-    witness: bool | None,
+    witness: bool,
 ) -> None:
     try:
         client = get_client(require_node=True)
         resp: RgbInvoiceResponse = await client.rln.create_rgb_invoice(
             RgbInvoiceRequest(
                 asset_id=asset_id,
-                assignment=(AssignmentFungible(type="Fungible", value=amount) if amount else None),
+                assignment=(
+                    AssignmentFungible(type="Fungible", value=amount) if amount is not None else None
+                ),
                 min_confirmations=min_confirmations,
                 duration_seconds=duration_seconds,
                 witness=witness,
@@ -321,23 +413,23 @@ async def _asset_invoice(
     ),
 )
 def asset_send(
-    asset_id: Annotated[str, typer.Argument(help="RGB asset ID to send.")],
-    amount: Annotated[int, typer.Argument(help="Amount to send in raw asset units.")],
-    invoice: Annotated[str, typer.Argument(help="Recipient RGB invoice.")],
+    asset_id: Annotated[str | None, typer.Argument(help="RGB asset ID to send.")] = None,
+    amount: Annotated[int | None, typer.Argument(help="Amount to send in raw asset units.")] = None,
+    invoice: Annotated[str | None, typer.Argument(help="Recipient RGB invoice.")] = None,
     fee_rate: Annotated[
-        float | None,
+        int,
         typer.Option(
             "--fee-rate",
-            help="On-chain fee rate in sat/vbyte. Uses node default if omitted.",
+            help="On-chain fee rate in sat/vbyte.",
         ),
-    ] = None,
+    ] = 1,
     min_confirmations: Annotated[
-        int | None,
+        int,
         typer.Option(
             "--min-confirmations",
             help="Minimum number of confirmations required for the transfer.",
         ),
-    ] = None,
+    ] = 0,
     donation: Annotated[
         bool,
         typer.Option(
@@ -345,6 +437,21 @@ def asset_send(
             help="Mark this transfer as a donation.",
         ),
     ] = False,
+    transport_endpoints: Annotated[
+        list[str],
+        typer.Option(
+            "--transport-endpoint",
+            help="Transport endpoint(s) for the recipient; can be repeated.",
+        ),
+    ] = [],
+    witness_amount_sat: Annotated[
+        int | None,
+        typer.Option("--witness-amount-sat", help="Optional witness UTXO amount in satoshis."),
+    ] = None,
+    witness_blinding: Annotated[
+        int | None,
+        typer.Option("--witness-blinding", help="Optional witness blinding factor."),
+    ] = None,
     skip_sync: Annotated[
         bool,
         typer.Option(
@@ -354,8 +461,46 @@ def asset_send(
     ] = False,
 ) -> None:
     """Send RGB assets to an invoice."""
+    resolved_asset_id: str
+    if asset_id is not None:
+        resolved_asset_id = asset_id
+    elif is_interactive():
+        resolved_asset_id = typer.prompt("RGB asset ID (rgb:...)")
+    else:
+        print_error("ASSET_ID argument is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    resolved_amount: int
+    if amount is not None:
+        resolved_amount = amount
+    elif is_interactive():
+        resolved_amount = typer.prompt("Amount to send (raw units)", type=int)
+    else:
+        print_error("AMOUNT argument is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    resolved_invoice: str
+    if invoice is not None:
+        resolved_invoice = invoice
+    elif is_interactive():
+        resolved_invoice = typer.prompt("Recipient RGB invoice")
+    else:
+        print_error("INVOICE argument is required in non-interactive mode.")
+        raise typer.Exit(1)
+
     asyncio.run(
-        _asset_send(asset_id, amount, invoice, fee_rate, min_confirmations, donation, skip_sync)
+        _asset_send(
+            resolved_asset_id,
+            resolved_amount,
+            resolved_invoice,
+            fee_rate,
+            min_confirmations,
+            donation,
+            transport_endpoints,
+            witness_amount_sat,
+            witness_blinding,
+            skip_sync,
+        )
     )
 
 
@@ -363,26 +508,34 @@ async def _asset_send(
     asset_id: str,
     amount: int,
     invoice: str,
-    fee_rate: float | None,
-    min_confirmations: int | None,
+    fee_rate: int,
+    min_confirmations: int,
     donation: bool,
+    transport_endpoints: list[str],
+    witness_amount_sat: int | None,
+    witness_blinding: int | None,
     skip_sync: bool,
 ) -> None:
     try:
         client = get_client(require_node=True)
+        witness_data = None
+        if witness_amount_sat is not None:
+            witness_data = WitnessData(amount_sat=witness_amount_sat, blinding=witness_blinding)
         body = SendRgbRequest(
             recipient_map={
                 asset_id: [
                     Recipient(
                         recipient_id=invoice,
+                        witness_data=witness_data,
                         assignment=AssignmentFungible(type="Fungible", value=amount),
+                        transport_endpoints=transport_endpoints,
                     )
                 ]
             },
             fee_rate=fee_rate,
             min_confirmations=min_confirmations,
-            donation=donation if donation else None,
-            skip_sync=skip_sync if skip_sync else None,
+            donation=donation,
+            skip_sync=skip_sync,
         )
         resp: SendRgbResponse = await client.rln.send_rgb(body)
         if is_json_mode():
@@ -411,7 +564,7 @@ async def _asset_send(
         '      {"recipient_id": "rgb:invoice3...", "assignment": {"type": "Fungible", "value": 50}}\n'
         "    ]\n"
         "  },\n"
-        '  "fee_rate": 2.5,\n'
+        '  "fee_rate": 2,\n'
         '  "min_confirmations": 3,\n'
         '  "donation": false,\n'
         '  "skip_sync": false\n'
@@ -440,32 +593,16 @@ async def _asset_send_batch(json_file: str) -> None:
 
         client = get_client(require_node=True)
 
-        # Parse recipient_map to ensure proper types
         recipient_map = {}
         for asset_id, recipients in data.get("recipient_map", {}).items():
-            recipient_list = []
-            for r in recipients:
-                assignment_data = r["assignment"]
-                if assignment_data["type"] == "Fungible":
-                    assignment = AssignmentFungible(type="Fungible", value=assignment_data["value"])
-                else:
-                    # Handle other assignment types if needed
-                    assignment = assignment_data
-
-                recipient_list.append(
-                    Recipient(
-                        recipient_id=r["recipient_id"],
-                        assignment=assignment,
-                    )
-                )
-            recipient_map[asset_id] = recipient_list
+            recipient_map[asset_id] = [Recipient.model_validate(recipient) for recipient in recipients]
 
         body = SendRgbRequest(
             recipient_map=recipient_map,
-            fee_rate=data.get("fee_rate"),
-            min_confirmations=data.get("min_confirmations"),
-            donation=data.get("donation"),
-            skip_sync=data.get("skip_sync"),
+            fee_rate=data.get("fee_rate", 1),
+            min_confirmations=data.get("min_confirmations", 0),
+            donation=bool(data.get("donation", False)),
+            skip_sync=bool(data.get("skip_sync", False)),
         )
 
         resp: SendRgbResponse = await client.rln.send_rgb(body)
@@ -492,15 +629,15 @@ async def _asset_send_batch(json_file: str) -> None:
 )
 def asset_transfers(
     asset_id: Annotated[
-        str | None,
-        typer.Argument(help="Filter by asset ID. Omit to show all transfers."),
-    ] = None,
+        str,
+        typer.Argument(help="RGB asset ID to list transfers for."),
+    ],
 ) -> None:
-    """List RGB transfers."""
+    """List RGB transfers for a specific asset."""
     asyncio.run(_asset_transfers(asset_id))
 
 
-async def _asset_transfers(asset_id: str | None) -> None:
+async def _asset_transfers(asset_id: str) -> None:
     try:
         client = get_client(require_node=True)
         resp: ListTransfersResponse = await client.rln.list_transfers(
@@ -509,7 +646,18 @@ async def _asset_transfers(asset_id: str | None) -> None:
         if is_json_mode():
             print_json(resp.model_dump())
             return
-        rows = [[t.idx, t.status, t.amount, t.txid or "-"] for t in (resp.transfers or [])]
+        rows = [
+            [
+                t.idx,
+                t.status,
+                # Amount lives in requested_assignment for fungible transfers
+                t.requested_assignment.value
+                if isinstance(t.requested_assignment, AssignmentFungible)
+                else "-",
+                t.txid or "-",
+            ]
+            for t in (resp.transfers or [])
+        ]
         print_table("RGB Transfers", ["Index", "Status", "Amount", "TXID"], rows)
     except Exception as e:
         print_error(f"Error: {e}")
@@ -544,7 +692,7 @@ def asset_refresh(
 async def _asset_refresh(skip_sync: bool) -> None:
     try:
         client = get_client(require_node=True)
-        body = RefreshRequest(skip_sync=skip_sync if skip_sync else None)
+        body = RefreshRequest(skip_sync=skip_sync)
         await client.rln.refresh_transfers(body)
         print_success("Transfers refreshed.")
     except Exception as e:

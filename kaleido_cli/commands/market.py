@@ -9,6 +9,7 @@ import typer
 
 from kaleido_cli.context import get_client
 from kaleido_cli.output import (
+    is_interactive,
     is_json_mode,
     output_model,
     print_error,
@@ -94,11 +95,11 @@ async def _market_pairs() -> None:
 )
 def market_quote(
     pair: Annotated[
-        str,
+        str | None,
         typer.Argument(
             help="Trading pair in [green]BASE/QUOTE[/green] format, e.g. [green]BTC/USDT[/green]."
         ),
-    ],
+    ] = None,
     from_amount: Annotated[
         int | None,
         typer.Option(
@@ -129,10 +130,30 @@ def market_quote(
     ] = "RGB_LN",
 ) -> None:
     """Get a swap quote for a trading pair."""
-    if from_amount is None and to_amount is None:
-        print_error("Provide --from-amount or --to-amount.")
+    resolved_pair: str
+    if pair is not None:
+        resolved_pair = pair
+    elif is_interactive():
+        resolved_pair = typer.prompt("Trading pair (e.g. BTC/USDT)")
+    else:
+        print_error("PAIR argument is required in non-interactive mode.")
         raise typer.Exit(1)
-    asyncio.run(_market_quote(pair, from_amount, to_amount, from_layer, to_layer))
+
+    if from_amount is None and to_amount is None:
+        if is_interactive():
+            choice = typer.prompt("Quote by [S]end amount or [R]eceive amount?", default="S")
+            if choice.strip().upper().startswith("R"):
+                to_amount = typer.prompt("Amount to receive (raw units)", type=int)
+            else:
+                from_amount = typer.prompt("Amount to send (raw units)", type=int)
+        else:
+            print_error("Provide --from-amount or --to-amount in non-interactive mode.")
+            raise typer.Exit(1)
+    elif from_amount is not None and to_amount is not None:
+        print_error("Provide exactly one of --from-amount or --to-amount.")
+        raise typer.Exit(1)
+
+    asyncio.run(_market_quote(resolved_pair, from_amount, to_amount, from_layer, to_layer))
 
 
 async def _market_quote(
@@ -142,7 +163,7 @@ async def _market_quote(
     from_layer: str,
     to_layer: str,
 ) -> None:
-    from kaleidoswap_sdk import Layer, PairQuoteRequest, SwapLegInput
+    from kaleido_sdk import Layer, PairQuoteRequest, SwapLegInput
 
     try:
         client = get_client()

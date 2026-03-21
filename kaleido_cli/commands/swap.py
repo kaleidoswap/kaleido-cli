@@ -6,7 +6,7 @@ import asyncio
 from typing import Annotated
 
 import typer
-from kaleidoswap_sdk import (
+from kaleido_sdk import (
     Layer,
     OrderHistoryResponse,
     PairQuoteRequest,
@@ -16,10 +16,11 @@ from kaleidoswap_sdk import (
     SwapOrderStatusResponse,
     TradingPairsResponse,
 )
-from kaleidoswap_sdk.rln import ListSwapsResponse
+from kaleido_sdk.rln import ListSwapsResponse
 
 from kaleido_cli.context import get_client
 from kaleido_cli.output import (
+    is_interactive,
     is_json_mode,
     output_model,
     print_error,
@@ -47,11 +48,11 @@ swap_app = typer.Typer(
 )
 def swap_quote(
     pair: Annotated[
-        str,
+        str | None,
         typer.Argument(
             help="Trading pair in [green]BASE/QUOTE[/green] format, e.g. [green]BTC/USDT[/green]."
         ),
-    ],
+    ] = None,
     from_amount: Annotated[
         int | None,
         typer.Option(
@@ -76,10 +77,30 @@ def swap_quote(
     ] = "RGB_LN",
 ) -> None:
     """Get a swap quote (alias for 'kaleido market quote')."""
-    if from_amount is None and to_amount is None:
-        print_error("Provide --from-amount or --to-amount.")
+    resolved_pair: str
+    if pair is not None:
+        resolved_pair = pair
+    elif is_interactive():
+        resolved_pair = typer.prompt("Trading pair (e.g. BTC/USDT)")
+    else:
+        print_error("PAIR argument is required in non-interactive mode.")
         raise typer.Exit(1)
-    asyncio.run(_swap_quote(pair, from_amount, to_amount, from_layer, to_layer))
+
+    if from_amount is None and to_amount is None:
+        if is_interactive():
+            choice = typer.prompt("Quote by [S]end amount or [R]eceive amount?", default="S")
+            if choice.strip().upper().startswith("R"):
+                to_amount = typer.prompt("Amount to receive (raw units)", type=int)
+            else:
+                from_amount = typer.prompt("Amount to send (raw units)", type=int)
+        else:
+            print_error("Provide --from-amount or --to-amount in non-interactive mode.")
+            raise typer.Exit(1)
+    elif from_amount is not None and to_amount is not None:
+        print_error("Provide exactly one of --from-amount or --to-amount.")
+        raise typer.Exit(1)
+
+    asyncio.run(_swap_quote(resolved_pair, from_amount, to_amount, from_layer, to_layer))
 
 
 async def _swap_quote(
@@ -180,16 +201,20 @@ async def _swap_history(status: str | None, limit: int) -> None:
 )
 def swap_status(
     order_id: Annotated[str, typer.Argument(help="Full swap order ID to look up.")],
+    access_token: Annotated[
+        str,
+        typer.Option("--access-token", help="Optional access token returned for the swap order."),
+    ] = "",
 ) -> None:
     """Check the status of a swap order."""
-    asyncio.run(_swap_status(order_id))
+    asyncio.run(_swap_status(order_id, access_token))
 
 
-async def _swap_status(order_id: str) -> None:
+async def _swap_status(order_id: str, access_token: str) -> None:
     try:
         client = get_client()
         resp: SwapOrderStatusResponse = await client.maker.get_swap_order_status(
-            SwapOrderStatusRequest(order_id=order_id)
+            SwapOrderStatusRequest(order_id=order_id, access_token=access_token)
         )
         if is_json_mode():
             print_json(resp.model_dump())

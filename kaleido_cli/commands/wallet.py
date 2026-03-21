@@ -6,7 +6,7 @@ import asyncio
 from typing import Annotated
 
 import typer
-from kaleidoswap_sdk.rln import (
+from kaleido_sdk.rln import (
     AddressResponse,
     BackupRequest,
     BtcBalanceResponse,
@@ -21,6 +21,7 @@ from kaleidoswap_sdk.rln import (
 
 from kaleido_cli.context import get_client
 from kaleido_cli.output import (
+    is_interactive,
     is_json_mode,
     output_model,
     print_error,
@@ -102,26 +103,47 @@ async def _wallet_balance(skip_sync: bool) -> None:
     ),
 )
 def wallet_send(
-    amount: Annotated[int, typer.Argument(help="Amount to send in satoshis.")],
-    address: Annotated[str, typer.Argument(help="Destination Bitcoin address.")],
+    amount: Annotated[int | None, typer.Argument(help="Amount to send in satoshis.")] = None,
+    address: Annotated[str | None, typer.Argument(help="Destination Bitcoin address.")] = None,
     fee_rate: Annotated[
-        float | None,
-        typer.Option("--fee-rate", help="Fee rate in sat/vbyte. Uses node default if omitted."),
-    ] = None,
+        int,
+        typer.Option("--fee-rate", help="Fee rate in sat/vbyte."),
+    ] = 1,
     skip_sync: Annotated[
         bool,
         typer.Option("--skip-sync", help="Skip blockchain sync before sending."),
     ] = False,
 ) -> None:
     """Send on-chain BTC."""
-    asyncio.run(_wallet_send(amount, address, fee_rate, skip_sync))
+    resolved_amount: int
+    if amount is not None:
+        resolved_amount = amount
+    elif is_interactive():
+        resolved_amount = typer.prompt("Amount to send (satoshis)", type=int)
+    else:
+        print_error("AMOUNT argument is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    resolved_address: str
+    if address is not None:
+        resolved_address = address
+    elif is_interactive():
+        resolved_address = typer.prompt("Destination Bitcoin address")
+    else:
+        print_error("ADDRESS argument is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    asyncio.run(_wallet_send(resolved_amount, resolved_address, fee_rate, skip_sync))
 
 
-async def _wallet_send(amount: int, address: str, fee_rate: float | None, skip_sync: bool) -> None:
+async def _wallet_send(amount: int, address: str, fee_rate: int, skip_sync: bool) -> None:
     try:
         client = get_client(require_node=True)
         body = SendBtcRequest(
-            amount=amount, address=address, fee_rate=fee_rate, skip_sync=skip_sync
+            amount=amount,
+            address=address,
+            fee_rate=fee_rate,
+            skip_sync=skip_sync,
         )
         resp: SendBtcResponse = await client.rln.send_btc(body)
         if is_json_mode():
@@ -199,15 +221,25 @@ def wallet_create_utxos(
         typer.Option("--up-to", help="If true, num represents total limit instead of count."),
     ] = False,
     fee_rate: Annotated[
-        float | None,
+        int,
         typer.Option("--fee-rate", help="On-chain fee rate in sat/vbyte."),
-    ] = None,
+    ] = 1,
     skip_sync: Annotated[
         bool,
         typer.Option("--skip-sync", help="Skip blockchain sync before creating UTXOs."),
     ] = False,
 ) -> None:
     """Create UTXOs for RGB asset operations."""
+    if is_interactive():
+        if num is None:
+            raw = typer.prompt("[OPTIONAL] Number of UTXOs to create (Enter for node default)", default="")
+            if raw.strip():
+                num = int(raw.strip())
+        if size is None:
+            raw = typer.prompt("[OPTIONAL] Size of each UTXO in satoshis (Enter for node default)", default="")
+            if raw.strip():
+                size = int(raw.strip())
+
     asyncio.run(
         _wallet_create_utxos(
             num=num,
@@ -223,7 +255,7 @@ async def _wallet_create_utxos(
     num: int | None,
     size: int | None,
     up_to: bool,
-    fee_rate: float | None,
+    fee_rate: int,
     skip_sync: bool,
 ) -> None:
     try:
@@ -295,7 +327,9 @@ async def _wallet_transactions(skip_sync: bool) -> None:
     ),
 )
 def wallet_backup(
-    path: Annotated[str, typer.Argument(help="Destination path for the backup archive.")],
+    path: Annotated[
+        str | None, typer.Argument(help="Destination path for the backup archive.")
+    ] = None,
     password: Annotated[
         str | None,
         typer.Option(
@@ -307,9 +341,22 @@ def wallet_backup(
     ] = None,
 ) -> None:
     """Backup node wallet data."""
-    if password is None:
-        password = typer.prompt("Backup password", hide_input=True, confirmation_prompt=True)
-    asyncio.run(_wallet_backup(path, password))
+    resolved_path: str
+    if path is not None:
+        resolved_path = path
+    elif is_interactive():
+        resolved_path = typer.prompt("Destination path for the backup archive")
+    else:
+        print_error("PATH argument is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    resolved_password: str
+    if password is not None:
+        resolved_password = password
+    else:
+        resolved_password = typer.prompt("Backup password", hide_input=True, confirmation_prompt=True)
+
+    asyncio.run(_wallet_backup(resolved_path, resolved_password))
 
 
 async def _wallet_backup(path: str, password: str) -> None:
