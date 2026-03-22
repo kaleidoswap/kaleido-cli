@@ -221,3 +221,71 @@ async def _market_info() -> None:
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
+
+
+@market_app.command(
+    "routes",
+    epilog=(
+        "[bold]Examples[/bold]\n\n"
+        "  List routes for BTC/USDT:\n"
+        "  [cyan]kaleido market routes BTC/USDT[/cyan]\n\n"
+        "  Raw JSON:\n"
+        "  [cyan]kaleido --json market routes BTC/USDT[/cyan]"
+    ),
+)
+def market_routes(
+    pair: Annotated[
+        str | None,
+        typer.Argument(help="Trading pair in BASE/QUOTE format, e.g. BTC/USDT."),
+    ] = None,
+) -> None:
+    """List available swap routes for a trading pair."""
+    resolved_pair: str
+    if pair is not None:
+        resolved_pair = pair
+    elif is_interactive():
+        resolved_pair = typer.prompt("Trading pair (e.g. BTC/USDT)")
+    else:
+        print_error("PAIR argument is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    asyncio.run(_market_routes(resolved_pair))
+
+
+async def _market_routes(pair: str) -> None:
+    try:
+        client = get_client()
+        routes = await client.maker.get_pair_routes(pair.upper())
+        if is_json_mode():
+            print_json([r.model_dump() for r in routes])
+            return
+        rows = [
+            [r.from_layer, r.to_layer]
+            for r in routes
+        ]
+        print_table(f"Routes — {pair.upper()}", ["From Layer", "To Layer"], rows)
+    except Exception as e:
+        print_error(f"Error: {e}")
+        raise typer.Exit(1)
+
+
+@market_app.command(
+    "analytics",
+    epilog="  [cyan]kaleido market analytics[/cyan]   Get order statistics.",
+)
+def market_analytics() -> None:
+    """Show Kaleidoswap order analytics and statistics."""
+    asyncio.run(_market_analytics())
+
+
+async def _market_analytics() -> None:
+    try:
+        client = get_client()
+        stats = await client.maker.get_order_analytics()
+        if is_json_mode():
+            print_json(stats.model_dump())
+        else:
+            output_model(stats, title="Order Analytics")
+    except Exception as e:
+        print_error(f"Error: {e}")
+        raise typer.Exit(1)

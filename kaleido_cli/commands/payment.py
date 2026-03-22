@@ -15,6 +15,8 @@ from kaleido_sdk.rln import (
     GetPaymentResponse,
     InvoiceStatusRequest,
     InvoiceStatusResponse,
+    KeysendRequest,
+    KeysendResponse,
     ListPaymentsResponse,
     LNInvoiceRequest,
     LNInvoiceResponse,
@@ -291,3 +293,80 @@ async def _payment_invoice_status(invoice: str) -> None:
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
+
+
+@payment_app.command(
+    "keysend",
+    epilog=(
+        "[bold]Examples[/bold]\n\n"
+        "  Send 1 000 msat spontaneously to a peer:\n"
+        "  [cyan]kaleido payment keysend 03b79a4... 1000[/cyan]\n\n"
+        "  Send RGB assets spontaneously:\n"
+        "  [cyan]kaleido payment keysend 03b79a4... 3000000 --asset-id rgb:abc... --asset-amount 10[/cyan]\n\n"
+        "[dim]Keysend is a spontaneous payment — no invoice needed, but the recipient node must support it.[/dim]"
+    ),
+)
+def payment_keysend(
+    dest_pubkey: Annotated[
+        str | None,
+        typer.Argument(help="Destination node public key (hex, 33 bytes)."),
+    ] = None,
+    amt_msat: Annotated[
+        int | None,
+        typer.Argument(help="Amount to send in millisatoshis."),
+    ] = None,
+    asset_id: Annotated[
+        str | None,
+        typer.Option("--asset-id", help="RGB asset ID for spontaneous RGB+LN payment."),
+    ] = None,
+    asset_amount: Annotated[
+        int | None,
+        typer.Option("--asset-amount", help="RGB asset amount."),
+    ] = None,
+) -> None:
+    """Send a spontaneous Lightning payment (keysend) without needing an invoice."""
+    resolved_pubkey: str
+    if dest_pubkey is not None:
+        resolved_pubkey = dest_pubkey
+    elif is_interactive():
+        resolved_pubkey = typer.prompt("Destination pubkey")
+    else:
+        print_error("DEST_PUBKEY argument is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    resolved_amt: int
+    if amt_msat is not None:
+        resolved_amt = amt_msat
+    elif is_interactive():
+        resolved_amt = typer.prompt("Amount in msat", type=int)
+    else:
+        print_error("AMT_MSAT argument is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    asyncio.run(_payment_keysend(resolved_pubkey, resolved_amt, asset_id, asset_amount))
+
+
+async def _payment_keysend(
+    dest_pubkey: str,
+    amt_msat: int,
+    asset_id: str | None,
+    asset_amount: int | None,
+) -> None:
+    try:
+        client = get_client(require_node=True)
+        resp: KeysendResponse = await client.rln.keysend(
+            KeysendRequest(
+                dest_pubkey=dest_pubkey,
+                amt_msat=amt_msat,
+                asset_id=asset_id,
+                asset_amount=asset_amount,
+            )
+        )
+        if is_json_mode():
+            print_json(resp.model_dump())
+        else:
+            output_model(resp, title="Keysend Result")
+    except Exception as e:
+        print_error(f"Error: {e}")
+        raise typer.Exit(1)
+

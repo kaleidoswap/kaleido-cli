@@ -13,10 +13,16 @@ from kaleido_sdk.rln import (
     AssetMetadataRequest,
     AssetMetadataResponse,
     AssignmentFungible,
+    FailTransfersRequest,
+    FailTransfersResponse,
+    GetAssetMediaRequest,
+    GetAssetMediaResponse,
     IssueAssetCFARequest,
     IssueAssetCFAResponse,
     IssueAssetNIARequest,
     IssueAssetNIAResponse,
+    IssueAssetUDARequest,
+    IssueAssetUDAResponse,
     ListAssetsResponse,
     ListTransfersRequest,
     ListTransfersResponse,
@@ -695,6 +701,203 @@ async def _asset_refresh(skip_sync: bool) -> None:
         body = RefreshRequest(skip_sync=skip_sync)
         await client.rln.refresh_transfers(body)
         print_success("Transfers refreshed.")
+    except Exception as e:
+        print_error(f"Error: {e}")
+        raise typer.Exit(1)
+
+
+@asset_app.command(
+    "issue-uda",
+    epilog=(
+        "[bold]Examples[/bold]\n\n"
+        "  Issue a simple UDA (NFT):\n"
+        '  [cyan]kaleido asset issue-uda --ticker NFT1 --name "My NFT"[/cyan]\n\n'
+        "  With a description and a media file:\n"
+        '  [cyan]kaleido asset issue-uda --ticker ART1 --name "Art NFT" --description "Limited edition" --file ./art.png[/cyan]\n\n'
+        "[dim]UDA = Unique Digital Asset (non-fungible). Supply is always 1.[/dim]"
+    ),
+)
+def asset_issue_uda(
+    ticker: Annotated[
+        str | None,
+        typer.Option("--ticker", help="Short ticker symbol, e.g. NFT1."),
+    ] = None,
+    name: Annotated[
+        str | None,
+        typer.Option("--name", help="Human-readable asset name."),
+    ] = None,
+    description: Annotated[
+        str | None,
+        typer.Option("--description", help="Optional description."),
+    ] = None,
+    file_path: Annotated[
+        str | None,
+        typer.Option("--file", help="Path to a media file (image, etc.) to embed."),
+    ] = None,
+    precision: Annotated[
+        int,
+        typer.Option("--precision", help="Number of decimal places (usually 0 for NFTs)."),
+    ] = 0,
+) -> None:
+    """Issue a new UDA (Unique Digital Asset / NFT) RGB token."""
+    resolved_ticker: str
+    if ticker is not None:
+        resolved_ticker = ticker
+    elif is_interactive():
+        resolved_ticker = typer.prompt("Ticker symbol (e.g. NFT1)")
+    else:
+        print_error("--ticker is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    resolved_name: str
+    if name is not None:
+        resolved_name = name
+    elif is_interactive():
+        resolved_name = typer.prompt("Asset name")
+    else:
+        print_error("--name is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    if is_interactive():
+        raw = typer.prompt("[OPTIONAL] Description (Enter to skip)", default="")
+        if raw.strip():
+            description = raw.strip()
+        raw = typer.prompt("[OPTIONAL] Media file path (Enter to skip)", default="")
+        if raw.strip():
+            file_path = raw.strip()
+
+    asyncio.run(_issue_uda(resolved_ticker, resolved_name, description, file_path, precision))
+
+
+async def _issue_uda(
+    ticker: str,
+    name: str,
+    description: str | None,
+    file_path: str | None,
+    precision: int,
+) -> None:
+    try:
+        client = get_client(require_node=True)
+        media_file_digest: str | None = None
+        if file_path:
+            with open(file_path, "rb") as f:
+                media_file_digest = hashlib.sha256(f.read()).hexdigest()
+        body = IssueAssetUDARequest(
+            ticker=ticker,
+            name=name,
+            details=description,
+            precision=precision,
+            media_file_digest=media_file_digest,
+            attachments_file_digests=[],
+        )
+        resp: IssueAssetUDAResponse = await client.rln.issue_asset_uda(body)
+        if is_json_mode():
+            print_json(resp.model_dump())
+        else:
+            print_success(f"UDA asset issued: {resp.asset.asset_id}")
+            output_model(resp, title="Issued Asset")
+    except Exception as e:
+        print_error(f"Error: {e}")
+        raise typer.Exit(1)
+
+
+@asset_app.command(
+    "sync",
+    epilog="  [cyan]kaleido asset sync[/cyan]   Synchronize RGB wallet with the blockchain.",
+)
+def asset_sync() -> None:
+    """Synchronize the RGB wallet with the blockchain."""
+    asyncio.run(_asset_sync())
+
+
+async def _asset_sync() -> None:
+    try:
+        client = get_client(require_node=True)
+        await client.rln.sync_rgb_wallet()
+        print_success("RGB wallet synced.")
+    except Exception as e:
+        print_error(f"Error: {e}")
+        raise typer.Exit(1)
+
+
+@asset_app.command(
+    "fail-transfers",
+    epilog=(
+        "[bold]Examples[/bold]\n\n"
+        "  Fail all pending transfers with no asset assigned:\n"
+        "  [cyan]kaleido asset fail-transfers[/cyan]\n\n"
+        "  Fail a specific batch transfer:\n"
+        "  [cyan]kaleido asset fail-transfers --batch-idx 3[/cyan]"
+    ),
+)
+def asset_fail_transfers(
+    batch_idx: Annotated[
+        int | None,
+        typer.Option("--batch-idx", help="Specific batch transfer index to fail. Omit for all."),
+    ] = None,
+    no_asset_only: Annotated[
+        bool,
+        typer.Option("--no-asset-only", help="Only fail transfers with no associated asset."),
+    ] = False,
+    skip_sync: Annotated[
+        bool,
+        typer.Option("--skip-sync", help="Skip blockchain sync before processing."),
+    ] = False,
+) -> None:
+    """Mark pending RGB transfers as failed."""
+    asyncio.run(_asset_fail_transfers(batch_idx, no_asset_only, skip_sync))
+
+
+async def _asset_fail_transfers(batch_idx: int | None, no_asset_only: bool, skip_sync: bool) -> None:
+    try:
+        client = get_client(require_node=True)
+        resp: FailTransfersResponse = await client.rln.fail_transfers(
+            FailTransfersRequest(
+                batch_transfer_idx=batch_idx,
+                no_asset_only=no_asset_only,
+                skip_sync=skip_sync,
+            )
+        )
+        if is_json_mode():
+            print_json(resp.model_dump())
+        else:
+            changed = "yes" if resp.transfers_changed else "no"
+            print_success(f"Done. Transfers changed: {changed}")
+    except Exception as e:
+        print_error(f"Error: {e}")
+        raise typer.Exit(1)
+
+
+@asset_app.command(
+    "media",
+    epilog=(
+        "[bold]Examples[/bold]\n\n"
+        "  Fetch and print the hex bytes of an asset's media:\n"
+        "  [cyan]kaleido asset media 5891b5b5...[/cyan]\n\n"
+        "  Save the raw bytes to a file:\n"
+        "  [cyan]kaleido --json asset media 5891b5b5... | jq -r .bytes_hex | xxd -r -p > out.png[/cyan]"
+    ),
+)
+def asset_media(
+    digest: Annotated[
+        str,
+        typer.Argument(help="SHA-256 digest of the media file to retrieve."),
+    ],
+) -> None:
+    """Fetch raw media bytes for an RGB asset by file digest."""
+    asyncio.run(_asset_media(digest))
+
+
+async def _asset_media(digest: str) -> None:
+    try:
+        client = get_client(require_node=True)
+        resp: GetAssetMediaResponse = await client.rln.get_asset_media(
+            GetAssetMediaRequest(digest=digest)
+        )
+        if is_json_mode():
+            print_json(resp.model_dump())
+        else:
+            output_model(resp, title=f"Asset Media — {digest[:20]}…")
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
