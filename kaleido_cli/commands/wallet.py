@@ -10,11 +10,15 @@ from kaleido_sdk.rln import (
     AddressResponse,
     BackupRequest,
     BtcBalanceResponse,
+    ChangePasswordRequest,
     CreateUtxosRequest,
+    EstimateFeeRequest,
+    EstimateFeeResponse,
     ListTransactionsRequest,
     ListTransactionsResponse,
     ListUnspentsRequest,
     ListUnspentsResponse,
+    RestoreRequest,
     SendBtcRequest,
     SendBtcResponse,
 )
@@ -364,6 +368,155 @@ async def _wallet_backup(path: str, password: str) -> None:
         client = get_client(require_node=True)
         await client.rln.backup(BackupRequest(backup_path=path, password=password))
         print_success(f"Backup saved to {path}")
+    except Exception as e:
+        print_error(f"Error: {e}")
+        raise typer.Exit(1)
+
+
+@wallet_app.command(
+    "restore",
+    epilog=(
+        "[bold]Examples[/bold]\n\n"
+        "  Interactive password prompt:\n"
+        "  [cyan]kaleido wallet restore ~/my-backup.zip[/cyan]\n\n"
+        "  Non-interactive:\n"
+        "  [cyan]kaleido wallet restore /backups/node.zip --password mysecret[/cyan]\n\n"
+        "[bold dim]Warning:[/bold dim] Restore will overwrite the current node data."
+    ),
+)
+def wallet_restore(
+    path: Annotated[
+        str | None, typer.Argument(help="Path to the backup archive to restore from.")
+    ] = None,
+    password: Annotated[
+        str | None,
+        typer.Option(
+            "--password",
+            "-p",
+            hide_input=True,
+            help="Backup decryption password. Prompted if omitted.",
+        ),
+    ] = None,
+) -> None:
+    """Restore node wallet data from a backup."""
+    resolved_path: str
+    if path is not None:
+        resolved_path = path
+    elif is_interactive():
+        resolved_path = typer.prompt("Path to the backup archive")
+    else:
+        print_error("PATH argument is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    resolved_password: str
+    if password is not None:
+        resolved_password = password
+    else:
+        resolved_password = typer.prompt("Backup password", hide_input=True)
+
+    asyncio.run(_wallet_restore(resolved_path, resolved_password))
+
+
+async def _wallet_restore(path: str, password: str) -> None:
+    try:
+        client = get_client(require_node=True)
+        await client.rln.restore(RestoreRequest(backup_path=path, password=password))
+        print_success(f"Restored from {path}")
+    except Exception as e:
+        print_error(f"Error: {e}")
+        raise typer.Exit(1)
+
+
+@wallet_app.command(
+    "change-password",
+    epilog=(
+        "[bold]Examples[/bold]\n\n"
+        "  Interactive prompts:\n"
+        "  [cyan]kaleido wallet change-password[/cyan]\n\n"
+        "  Non-interactive:\n"
+        "  [cyan]kaleido wallet change-password --old-password old --new-password new[/cyan]"
+    ),
+)
+def wallet_change_password(
+    old_password: Annotated[
+        str | None,
+        typer.Option("--old-password", hide_input=True, help="Current wallet password."),
+    ] = None,
+    new_password: Annotated[
+        str | None,
+        typer.Option("--new-password", hide_input=True, help="New wallet password."),
+    ] = None,
+) -> None:
+    """Change the node wallet password."""
+    if old_password is None:
+        old_password = typer.prompt("Current password", hide_input=True)
+    if new_password is None:
+        new_password = typer.prompt("New password", hide_input=True, confirmation_prompt=True)
+
+    asyncio.run(_wallet_change_password(old_password, new_password))
+
+
+async def _wallet_change_password(old_password: str, new_password: str) -> None:
+    try:
+        client = get_client(require_node=True)
+        await client.rln.change_password(
+            ChangePasswordRequest(old_password=old_password, new_password=new_password)
+        )
+        print_success("Password changed successfully.")
+    except Exception as e:
+        print_error(f"Error: {e}")
+        raise typer.Exit(1)
+
+
+@wallet_app.command(
+    "estimate-fee",
+    epilog=(
+        "[bold]Examples[/bold]\n\n"
+        "  Estimate fee for confirmation within 6 blocks:\n"
+        "  [cyan]kaleido wallet estimate-fee --blocks 6[/cyan]\n\n"
+        "  Fast (1 block) confirmation target:\n"
+        "  [cyan]kaleido wallet estimate-fee --blocks 1[/cyan]"
+    ),
+)
+def wallet_estimate_fee(
+    blocks: Annotated[
+        int,
+        typer.Option("--blocks", "-b", help="Target confirmation in this many blocks."),
+    ] = 6,
+) -> None:
+    """Estimate the on-chain fee rate for a target confirmation window."""
+    asyncio.run(_wallet_estimate_fee(blocks))
+
+
+async def _wallet_estimate_fee(blocks: int) -> None:
+    try:
+        client = get_client(require_node=True)
+        resp: EstimateFeeResponse = await client.rln.estimate_fee(
+            EstimateFeeRequest(blocks=blocks)
+        )
+        if is_json_mode():
+            print_json(resp.model_dump())
+        else:
+            print_success(f"Estimated fee rate: {resp.fee_rate} sat/vbyte (target: {blocks} blocks)")
+    except Exception as e:
+        print_error(f"Error: {e}")
+        raise typer.Exit(1)
+
+
+@wallet_app.command(
+    "shutdown",
+    epilog="  [cyan]kaleido wallet shutdown[/cyan]   Gracefully shut down the node process.",
+)
+def wallet_shutdown() -> None:
+    """Gracefully shut down the node."""
+    asyncio.run(_wallet_shutdown())
+
+
+async def _wallet_shutdown() -> None:
+    try:
+        client = get_client(require_node=True)
+        await client.rln.shutdown()
+        print_success("Node shutdown initiated.")
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
