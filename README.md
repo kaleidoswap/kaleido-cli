@@ -14,6 +14,7 @@ A command-line interface for managing RGB Lightning Nodes and interacting with t
 ## Requirements
 
 - Python 3.10+
+- `curl` or `wget` for the one-line bootstrap installer
 - [uv](https://docs.astral.sh/uv/) (recommended) or pip
 - Docker & Docker Compose (required for `node` commands)
 
@@ -21,13 +22,19 @@ A command-line interface for managing RGB Lightning Nodes and interacting with t
 
 ## Installation
 
-### One command for macOS, Linux, and Windows
+### One command for macOS, Linux, and WSL
 
 ```bash
-uv tool install git+https://github.com/kaleidoswap/kaleido-cli.git
+curl -fsSL https://raw.githubusercontent.com/kaleidoswap/kaleido-cli/main/install.sh | sh
 ```
 
-This installs the `kaleido` command globally without cloning the repo first.
+Or with `wget`:
+
+```bash
+wget -qO- https://raw.githubusercontent.com/kaleidoswap/kaleido-cli/main/install.sh | sh
+```
+
+The bootstrap script downloads the latest `main` branch, prefers `uv tool install` when available, and falls back to `python -m pip install --user`.
 
 Then run:
 
@@ -47,13 +54,25 @@ Install directly from a local checkout for development:
 ```bash
 git clone https://github.com/kaleidoswap/kaleido-cli
 cd kaleido-cli
-make install
+./install.sh
 ```
 
-Or use the cross-platform bootstrap script from a checkout:
+Install without the shell bootstrap:
+
+```bash
+uv tool install git+https://github.com/kaleidoswap/kaleido-cli.git
+```
+
+For Windows or a cross-platform Python-based installer:
 
 ```bash
 python install.py
+```
+
+For a local editable install with the existing Makefile helper:
+
+```bash
+make install
 ```
 
 ### Makefile targets
@@ -301,7 +320,7 @@ kaleido market quote BTC/USDT --from-amount 100000 --from-layer BTC_LN --to-laye
 
 ```bash
 # 1. Install
-uv tool install git+https://github.com/kaleidoswap/kaleido-cli.git
+curl -fsSL https://raw.githubusercontent.com/kaleidoswap/kaleido-cli/main/install.sh | sh
 
 # 2. Run the guided setup
 kaleido setup
