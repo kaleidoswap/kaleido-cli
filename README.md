@@ -284,7 +284,6 @@ kaleido market quote BTC/USDT --from-amount 100000 --from-layer BTC_LN --to-laye
 | `kaleido swap node execute`         | Execute a low-level local node swap                      |
 | `kaleido swap node status <hash>`   | Check local node swap status by payment hash             |
 | `kaleido swap node list`            | List swaps known to the local RLN node                   |
-| `kaleido swap node run`             | Run maker-init -> whitelist -> maker-execute in one step |
 
 ### `config` — CLI configuration
 

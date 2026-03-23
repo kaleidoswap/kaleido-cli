@@ -16,11 +16,11 @@ from kaleido_cli.config import (
 )
 from kaleido_cli.output import (
     is_json_mode,
+    output_model,
     print_error,
     print_info,
     print_json,
     print_success,
-    print_table,
 )
 
 config_app = typer.Typer(
@@ -44,13 +44,16 @@ def config_show() -> None:
     if is_json_mode():
         print_json(config.to_dict())
         return
-    rows = [
-        ["api-url", config.api_url],
-        ["node-url", config.node_url],
-        ["network", config.network],
-        ["spawn-dir", config.spawn_dir or "(default: ~/.kaleido/spawn)"],
-    ]
-    print_table(f"Config ({CONFIG_FILE})", ["Key", "Value"], rows)
+    output_model(
+        {
+            "path": str(CONFIG_FILE),
+            "api_url": config.api_url,
+            "node_url": config.node_url,
+            "network": config.network,
+            "spawn_dir": config.spawn_dir or "(default: ~/.kaleido/spawn)",
+        },
+        title=f"Config ({CONFIG_FILE})",
+    )
 
 
 @config_app.command(

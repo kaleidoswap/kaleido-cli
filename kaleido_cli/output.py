@@ -8,7 +8,6 @@ from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.table import Table
 
 console = Console()
 err_console = Console(stderr=True)
@@ -71,30 +70,6 @@ def print_panel(title: str, content: str, style: str = "blue") -> None:
 
 
 # ---------------------------------------------------------------------------
-# Table builder
-# ---------------------------------------------------------------------------
-
-
-def print_table(
-    title: str,
-    columns: list[str],
-    rows: list[list[Any]],
-    *,
-    empty_msg: str = "No results.",
-) -> None:
-    if not rows:
-        print_info(f"{title}: {empty_msg}")
-        return
-
-    table = Table(title=title, show_header=True, header_style="bold cyan")
-    for col in columns:
-        table.add_column(col, overflow="fold")
-    for row in rows:
-        table.add_row(*[str(v) if v is not None else "-" for v in row])
-    console.print(table)
-
-
-# ---------------------------------------------------------------------------
 # Convenience: output a Pydantic model (JSON or table-friendly dict)
 # ---------------------------------------------------------------------------
 
@@ -115,6 +90,23 @@ def output_model(data: Any, title: str | None = None) -> None:
     lines = _flatten_dict(d)
     content = "\n".join(f"[bold]{k}[/bold]: {v}" for k, v in lines)
     console.print(Panel(content, title=title or "", border_style="blue"))
+
+
+def output_collection(
+    title: str,
+    items: list[Any],
+    *,
+    item_title: str | None = None,
+    empty_msg: str = "No results.",
+) -> None:
+    """Output a list of items as individual panels."""
+    if not items:
+        print_info(f"{title}: {empty_msg}")
+        return
+
+    for index, item in enumerate(items, start=1):
+        resolved_title = item_title.format(index=index) if item_title else f"{title} — {index}"
+        output_model(item, title=resolved_title)
 
 
 def _flatten_dict(d: dict, prefix: str = "") -> list[tuple[str, Any]]:

@@ -42,12 +42,12 @@ from kaleido_cli.context import get_client
 from kaleido_cli.output import (
     is_interactive,
     is_json_mode,
+    output_collection,
     output_model,
     print_error,
     print_info,
     print_json,
     print_success,
-    print_table,
 )
 
 swap_app = typer.Typer(
@@ -340,8 +340,11 @@ async def _order_history(status: str | None, limit: int) -> None:
         if is_json_mode():
             print_json(resp.model_dump())
             return
-        rows = [[o.id[:16] + "…" if o.id else "-", o.status, o.from_asset, o.to_asset, o.created_at] for o in (resp.data or [])]
-        print_table("Swap History", ["Order ID", "Status", "From", "To", "Created At"], rows)
+        output_collection(
+            "Swap History",
+            [o.model_dump() for o in (resp.data or [])],
+            item_title="Swap Order — {index}",
+        )
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
@@ -702,101 +705,12 @@ async def _node_list() -> None:
         if is_json_mode():
             print_json(resp.model_dump())
             return
-        rows = []
+        items = []
         for swap in resp.taker or []:
-            rows.append([swap.payment_hash[:16] + "…" if swap.payment_hash else "-", "taker", swap.status])
+            items.append({**swap.model_dump(), "role": "taker"})
         for swap in resp.maker or []:
-            rows.append([swap.payment_hash[:16] + "…" if swap.payment_hash else "-", "maker", swap.status])
-        print_table("Node Swaps", ["Payment Hash", "Role", "Status"], rows)
-    except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
-
-
-@node_app.command(
-    "run",
-    epilog=(
-        "[bold]Examples[/bold]\n\n"
-        "  Run a low-level node swap in one command:\n"
-        "  [cyan]kaleido swap node run --qty-from 30 --to-asset rgb:abc... --qty-to 10[/cyan]\n\n"
-        "[dim]Low-level node swap: maker-init -> taker whitelist -> maker-execute.[/dim]"
-    ),
-)
-def node_run(
-    from_asset: Annotated[str | None, typer.Option("--from-asset", help="RGB asset ID the maker will send (None = BTC).")] = None,
-    qty_from: Annotated[int | None, typer.Option("--qty-from", help="Amount the maker will send (raw units).")] = None,
-    to_asset: Annotated[str | None, typer.Option("--to-asset", help="RGB asset ID the maker will receive (None = BTC).")] = None,
-    qty_to: Annotated[int | None, typer.Option("--qty-to", help="Amount the maker will receive (raw units).")] = None,
-    timeout_sec: Annotated[int, typer.Option("--timeout", help="Swap offer timeout in seconds.")] = 100,
-    taker_pubkey: Annotated[str | None, typer.Option("--taker-pubkey", help="Pubkey of the taker node. Defaults to own node pubkey.")] = None,
-    yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip confirmation prompt.")] = False,
-) -> None:
-    """Run a low-level node swap: maker-init -> taker whitelist -> maker-execute."""
-    resolved_qty_from: int
-    if qty_from is not None:
-        resolved_qty_from = qty_from
-    elif is_interactive():
-        resolved_qty_from = typer.prompt("Quantity from (raw units)", type=int)
-    else:
-        print_error("--qty-from is required in non-interactive mode.")
-        raise typer.Exit(1)
-
-    resolved_qty_to: int
-    if qty_to is not None:
-        resolved_qty_to = qty_to
-    elif is_interactive():
-        resolved_qty_to = typer.prompt("Quantity to (raw units)", type=int)
-    else:
-        print_error("--qty-to is required in non-interactive mode.")
-        raise typer.Exit(1)
-
-    asyncio.run(_node_run(from_asset, resolved_qty_from, to_asset, resolved_qty_to, timeout_sec, taker_pubkey, yes))
-
-
-async def _node_run(
-    from_asset: str | None,
-    qty_from: int,
-    to_asset: str | None,
-    qty_to: int,
-    timeout_sec: int,
-    taker_pubkey_override: str | None,
-    yes: bool,
-) -> None:
-    try:
-        client = get_client(require_node=True)
-        init_resp: MakerInitResponse = await client.rln.maker_init(
-            MakerInitRequest(
-                qty_from=qty_from,
-                qty_to=qty_to,
-                from_asset=from_asset,
-                to_asset=to_asset,
-                timeout_sec=timeout_sec,
-            )
-        )
-        print_success(f"Maker init done — swapstring: {init_resp.swapstring}")
-        print_success(f"payment_hash: {init_resp.payment_hash}")
-        print_success(f"payment_secret: {init_resp.payment_secret}")
-
-        if not yes and is_interactive():
-            confirmed = typer.confirm("Whitelist this swap on the taker side and execute?")
-            if not confirmed:
-                print_error("Swap cancelled after maker-init.")
-                raise typer.Exit(0)
-
-        await client.rln.whitelist_swap(TakerRequest(swapstring=init_resp.swapstring))
-        print_success("Taker whitelisted the swap.")
-
-        resolved_taker_pubkey = taker_pubkey_override or await client.rln.get_taker_pubkey()
-        await client.rln.maker_execute(
-            MakerExecuteRequest(
-                swapstring=init_resp.swapstring,
-                payment_secret=init_resp.payment_secret,
-                taker_pubkey=resolved_taker_pubkey,
-            )
-        )
-        print_success("Swap executed successfully!")
-    except typer.Exit:
-        raise
+            items.append({**swap.model_dump(), "role": "maker"})
+        output_collection("Node Swaps", items, item_title="Node Swap — {index}")
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)

@@ -30,12 +30,12 @@ from kaleido_cli.context import get_client
 from kaleido_cli.output import (
     is_interactive,
     is_json_mode,
+    output_collection,
     output_model,
     print_error,
     print_json,
     print_panel,
     print_success,
-    print_table,
 )
 
 channel_app = typer.Typer(
@@ -293,15 +293,7 @@ async def _estimate_channel_order_fees(client: Any, params: ChannelOrderParams) 
 
 
 def _print_channel_order_fees(resp: ChannelFees, *, title: str) -> None:
-    rows = [
-        ["Setup fee", resp.setup_fee],
-        ["Capacity fee", resp.capacity_fee],
-        ["Duration fee", resp.duration_fee],
-        ["Total fee", resp.total_fee],
-        ["Applied discount", resp.applied_discount if resp.applied_discount is not None else "-"],
-        ["Discount code", resp.discount_code or "-"],
-    ]
-    print_table(title, ["Component", "Value"], rows)
+    output_model(resp, title=title)
 
 
 @channel_app.command("list")
@@ -317,30 +309,11 @@ async def _channel_list() -> None:
         if is_json_mode():
             print_json(resp.model_dump())
             return
-        rows = [
-            [
-                c.channel_id[:16] + "…" if c.channel_id else "-",
-                c.peer_pubkey[:16] + "…" if c.peer_pubkey else "-",
-                c.capacity_sat,
-                c.outbound_balance_msat,
-                c.inbound_balance_msat,
-                "yes" if c.is_usable else "no",
-                "yes" if c.ready else "no",
-            ]
-            for c in (resp.channels or [])
-        ]
-        print_table(
+        output_collection(
             "Channels",
-            [
-                "Channel ID",
-                "Peer",
-                "Capacity (sat)",
-                "Outbound (msat)",
-                "Inbound (msat)",
-                "Usable",
-                "Ready",
-            ],
-            rows,
+            [c for c in (resp.channels or [])],
+            item_title="Channel Details — {index}",
+            empty_msg="No channels.",
         )
     except Exception as e:
         print_error(f"Error: {e}")
@@ -918,38 +891,24 @@ def _short_id(value: str | None, *, prefix: int = 16, suffix: int = 8) -> str:
 def _print_lsp_info(resp: LspInfoResponse) -> None:
     print_panel("LSP Connection", resp.lsp_connection_url or "-", style="blue")
 
-    option_rows: list[list[object]] = []
     if resp.options is not None:
-        for key, value in resp.options.model_dump().items():
-            option_rows.append([_humanize_key(key), value])
-    print_table("Channel Options", ["Option", "Value"], option_rows)
-
-    asset_rows: list[list[object]] = []
-    for asset in resp.assets or []:
-        data = asset.model_dump()
-        asset_rows.append(
-            [
-                data.get("ticker"),
-                data.get("name"),
-                data.get("precision"),
-                _short_id(data.get("asset_id")),
-                f"{data.get('min_initial_client_amount')} -> {data.get('max_initial_client_amount')}",
-                f"{data.get('min_initial_lsp_amount')} -> {data.get('max_initial_lsp_amount')}",
-                f"{data.get('min_channel_amount')} -> {data.get('max_channel_amount')}",
-            ]
+        output_model(
+            {_humanize_key(key): value for key, value in resp.options.model_dump().items()},
+            title="Channel Options",
         )
-    print_table(
+    output_collection(
         "LSP Assets",
         [
-            "Ticker",
-            "Name",
-            "Precision",
-            "Asset ID",
-            "Client Range",
-            "LSP Range",
-            "Channel Range",
+            {
+                **asset.model_dump(),
+                "asset_id": _short_id(asset.asset_id),
+                "client_range": f"{asset.min_initial_client_amount} -> {asset.max_initial_client_amount}",
+                "lsp_range": f"{asset.min_initial_lsp_amount} -> {asset.max_initial_lsp_amount}",
+                "channel_range": f"{asset.min_channel_amount} -> {asset.max_channel_amount}",
+            }
+            for asset in (resp.assets or [])
         ],
-        asset_rows,
+        item_title="LSP Asset — {index}",
         empty_msg="No asset-backed channel options reported.",
     )
 

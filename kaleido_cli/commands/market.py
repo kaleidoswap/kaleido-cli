@@ -11,10 +11,10 @@ from kaleido_cli.context import get_client
 from kaleido_cli.output import (
     is_interactive,
     is_json_mode,
+    output_collection,
     output_model,
     print_error,
     print_json,
-    print_table,
 )
 
 market_app = typer.Typer(
@@ -43,8 +43,11 @@ async def _market_assets() -> None:
         if is_json_mode():
             print_json(resp.model_dump())
             return
-        rows = [[a.ticker, a.name, a.protocol_ids, a.precision] for a in (resp.assets or [])]
-        print_table("Tradeable Assets", ["Ticker", "Name", "Protocol IDs", "Precision"], rows)
+        output_collection(
+            "Tradeable Assets",
+            [a.model_dump() for a in (resp.assets or [])],
+            item_title="Asset — {index}",
+        )
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
@@ -63,17 +66,19 @@ async def _market_pairs() -> None:
         if is_json_mode():
             print_json(resp.model_dump())
             return
-        rows = [
-            [
-                f"{p.base.ticker}/{p.quote.ticker}",
-                p.base.ticker,
-                p.quote.ticker,
-                len(p.routes or []),
-                "yes" if p.is_active else "no",
-            ]
-            for p in (resp.pairs or [])
-        ]
-        print_table("Trading Pairs", ["Pair", "Base", "Quote", "Routes", "Active"], rows)
+        items = []
+        for p in resp.pairs or []:
+            items.append(
+                {
+                    "pair": f"{p.base.ticker}/{p.quote.ticker}",
+                    "base": p.base.model_dump() if hasattr(p.base, "model_dump") else p.base,
+                    "quote": p.quote.model_dump() if hasattr(p.quote, "model_dump") else p.quote,
+                    "routes": p.routes,
+                    "routes_count": len(p.routes or []),
+                    "is_active": p.is_active,
+                }
+            )
+        output_collection("Trading Pairs", items, item_title="Pair — {index}")
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
@@ -259,11 +264,11 @@ async def _market_routes(pair: str) -> None:
         if is_json_mode():
             print_json([r.model_dump() for r in routes])
             return
-        rows = [
-            [r.from_layer, r.to_layer]
-            for r in routes
-        ]
-        print_table(f"Routes — {pair.upper()}", ["From Layer", "To Layer"], rows)
+        output_collection(
+            f"Routes — {pair.upper()}",
+            [r.model_dump() for r in routes],
+            item_title=f"Route — {pair.upper()} #{{index}}",
+        )
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)

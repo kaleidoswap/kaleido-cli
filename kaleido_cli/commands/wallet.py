@@ -27,11 +27,11 @@ from kaleido_cli.context import get_client
 from kaleido_cli.output import (
     is_interactive,
     is_json_mode,
+    output_collection,
     output_model,
     print_error,
     print_json,
     print_success,
-    print_table,
 )
 
 wallet_app = typer.Typer(
@@ -186,15 +186,16 @@ async def _wallet_utxos(skip_sync: bool) -> None:
         if is_json_mode():
             print_json(resp.model_dump())
             return
-        rows = [
-            [
-                u.utxo.outpoint if u.utxo else "-",
-                u.utxo.btc_amount if u.utxo else "-",
-                u.rgb_allocations,
-            ]
-            for u in (resp.unspents or [])
-        ]
-        print_table("UTXOs", ["Outpoint", "BTC Amount (sat)", "RGB Allocations"], rows)
+        items = []
+        for u in resp.unspents or []:
+            items.append(
+                {
+                    "outpoint": u.utxo.outpoint if u.utxo else None,
+                    "btc_amount_sat": u.utxo.btc_amount if u.utxo else None,
+                    "rgb_allocations": u.rgb_allocations,
+                }
+            )
+        output_collection("UTXOs", items, item_title="UTXO — {index}")
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
@@ -306,14 +307,10 @@ async def _wallet_transactions(skip_sync: bool) -> None:
         if is_json_mode():
             print_json(resp.model_dump())
             return
-        rows = [
-            [t.txid, t.received, t.sent, t.fee, t.confirmation_time]
-            for t in (resp.transactions or [])
-        ]
-        print_table(
+        output_collection(
             "Transactions",
-            ["TXID", "Received (sat)", "Sent (sat)", "Fee (sat)", "Confirmed"],
-            rows,
+            [t.model_dump() for t in (resp.transactions or [])],
+            item_title="Transaction — {index}",
         )
     except Exception as e:
         print_error(f"Error: {e}")

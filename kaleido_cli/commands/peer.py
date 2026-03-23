@@ -16,10 +16,10 @@ from kaleido_cli.context import get_client
 from kaleido_cli.output import (
     is_interactive,
     is_json_mode,
+    output_collection,
     print_error,
     print_json,
     print_success,
-    print_table,
 )
 
 peer_app = typer.Typer(
@@ -42,8 +42,7 @@ async def _peer_list() -> None:
         if is_json_mode():
             print_json(resp.model_dump())
             return
-        rows = [[p.pubkey] for p in (resp.peers or [])]
-        print_table("Peers", ["Pubkey"], rows)
+        output_collection("Peers", [p.model_dump() for p in (resp.peers or [])], item_title="Peer — {index}")
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)

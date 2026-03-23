@@ -39,11 +39,11 @@ from kaleido_cli.context import get_client
 from kaleido_cli.output import (
     is_interactive,
     is_json_mode,
+    output_collection,
     output_model,
     print_error,
     print_json,
     print_success,
-    print_table,
 )
 
 asset_app = typer.Typer(
@@ -79,20 +79,17 @@ async def _asset_list() -> None:
         if is_json_mode():
             print_json(resp.model_dump())
             return
-        rows = []
-        # Add NIA assets
+        items = []
         if resp.nia:
             for asset in resp.nia:
-                rows.append([asset.asset_id or "", asset.ticker or "-", asset.name or "", "NIA"])
-        # Add CFA assets
+                items.append({**asset.model_dump(), "schema": "NIA"})
         if resp.cfa:
             for asset in resp.cfa:
-                rows.append([asset.asset_id or "", "-", asset.name or "", "CFA"])
-        # Add UDA assets
+                items.append({**asset.model_dump(), "schema": "CFA"})
         if resp.uda:
             for asset in resp.uda:
-                rows.append([asset.asset_id or "", asset.ticker or "-", asset.name or "", "UDA"])
-        print_table("RGB Assets", ["Asset ID", "Ticker", "Name", "Schema"], rows)
+                items.append({**asset.model_dump(), "schema": "UDA"})
+        output_collection("RGB Assets", items, item_title="RGB Asset — {index}")
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
@@ -659,19 +656,16 @@ async def _asset_transfers(asset_id: str) -> None:
         if is_json_mode():
             print_json(resp.model_dump())
             return
-        rows = [
-            [
-                t.idx,
-                t.status,
-                # Amount lives in requested_assignment for fungible transfers
+        items = []
+        for t in resp.transfers or []:
+            payload = t.model_dump()
+            payload["amount"] = (
                 t.requested_assignment.value
                 if isinstance(t.requested_assignment, AssignmentFungible)
-                else "-",
-                t.txid or "-",
-            ]
-            for t in (resp.transfers or [])
-        ]
-        print_table("RGB Transfers", ["Index", "Status", "Amount", "TXID"], rows)
+                else None
+            )
+            items.append(payload)
+        output_collection("RGB Transfers", items, item_title="RGB Transfer — {index}")
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)

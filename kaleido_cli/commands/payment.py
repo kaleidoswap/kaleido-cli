@@ -28,11 +28,11 @@ from kaleido_cli.context import get_client
 from kaleido_cli.output import (
     is_interactive,
     is_json_mode,
+    output_collection,
     output_model,
     print_error,
     print_json,
     print_success,
-    print_table,
 )
 
 payment_app = typer.Typer(
@@ -195,16 +195,12 @@ async def _payment_list() -> None:
         if is_json_mode():
             print_json(resp.model_dump())
             return
-        rows = [
-            [
-                p.payment_hash[:16] + "…" if p.payment_hash else "-",
-                p.status,
-                p.amt_msat,
-                "inbound" if p.inbound else "outbound",
-            ]
-            for p in (resp.payments or [])
-        ]
-        print_table("Payments", ["Payment Hash", "Status", "Amount (msat)", "Direction"], rows)
+        items = []
+        for p in resp.payments or []:
+            payload = p.model_dump()
+            payload["direction"] = "inbound" if p.inbound else "outbound"
+            items.append(payload)
+        output_collection("Payments", items, item_title="Payment — {index}")
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
@@ -369,4 +365,3 @@ async def _payment_keysend(
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
-
