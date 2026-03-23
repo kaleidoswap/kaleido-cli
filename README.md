@@ -175,7 +175,7 @@ After creating and starting an environment:
 kaleido node use testenv            # set the active node URL
 kaleido node init                   # initialise the wallet (once per node)
 kaleido node unlock                 # unlock the wallet (after every restart)
-kaleido node status                 # confirm the node is reachable
+kaleido node info                   # confirm the node is reachable
 ```
 
 ---
@@ -205,8 +205,9 @@ kaleido --json market pairs
 | `kaleido node init`                       | Initialise node wallet (once after first start)     |
 | `kaleido node unlock`                     | Unlock wallet (after every restart)                 |
 | `kaleido node lock`                       | Lock the wallet                                     |
-| `kaleido node status`                     | Check node health                                   |
 | `kaleido node info`                       | Show detailed node + network info                   |
+| `kaleido node taker pubkey`               | Show the node's taker public key                    |
+| `kaleido node taker whitelist <swap>`     | Whitelist a swap on the taker side                  |
 
 ### `wallet` — BTC wallet
 
@@ -310,7 +311,7 @@ kaleido node init
 kaleido node unlock
 
 # 4. If you chose a local node, confirm it is healthy
-kaleido node status
+kaleido node info
 
 # 5. If you chose a local node, get a funding address
 kaleido wallet address

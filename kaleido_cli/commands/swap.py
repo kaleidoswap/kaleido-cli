@@ -426,7 +426,7 @@ async def _atomic_init(
         "  Auto-whitelist before executing:\n"
         "  [cyan]kaleido swap atomic execute --auto-whitelist --swapstring '<swapstring>' "
         "--taker-pubkey 03ab... --payment-hash deadbeef...[/cyan]\n\n"
-        "[dim]Use the taker node pubkey from 'kaleido taker pubkey' or your node's pubkey.[/dim]"
+        "[dim]Use the taker node pubkey from 'kaleido node taker pubkey' or your node's pubkey.[/dim]"
     ),
 )
 def atomic_execute(
@@ -456,7 +456,7 @@ async def _atomic_execute(
     try:
         client = get_client(require_node=auto_whitelist)
         if auto_whitelist:
-            await client.rln.whitelist_swap(swapstring)
+            await client.rln.whitelist_swap(TakerRequest(swapstring=swapstring))
         resp: ConfirmSwapResponse = await client.maker.execute_swap(
             ConfirmSwapRequest(
                 swapstring=swapstring,
