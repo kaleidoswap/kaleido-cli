@@ -51,6 +51,13 @@ asset_app = typer.Typer(
     rich_markup_mode="rich",
     help="Manage RGB assets — list, issue, send (single or batch), invoices, and transfer history.",
 )
+issue_app = typer.Typer(
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+    help="Issue new RGB assets by schema: NIA, CFA, or UDA.",
+)
+
+asset_app.add_typer(issue_app, name="issue")
 
 
 @asset_app.command(
@@ -137,14 +144,14 @@ async def _asset_metadata(asset_id: str) -> None:
         raise typer.Exit(1)
 
 
-@asset_app.command(
-    "issue-nia",
+@issue_app.command(
+    "nia",
     epilog=(
         "[bold]Examples[/bold]\n\n"
         "  Issue 1 000 000 USDT tokens with 6 decimal places:\n"
-        '  [cyan]kaleido asset issue-nia --name "Tether USD" --ticker USDT --supply 1000000 --precision 6[/cyan]\n\n'
+        '  [cyan]kaleido asset issue nia --name "Tether USD" --ticker USDT --supply 1000000 --precision 6[/cyan]\n\n'
         "  Issue a simple whole-unit token:\n"
-        "  [cyan]kaleido asset issue-nia --name MyToken --ticker MTK --supply 21000000[/cyan]\n\n"
+        "  [cyan]kaleido asset issue nia --name MyToken --ticker MTK --supply 21000000[/cyan]\n\n"
         "[dim]NIA = Non-Inflatable Asset (fixed-supply fungible token).[/dim]"
     ),
 )
@@ -216,14 +223,14 @@ async def _issue_nia(name: str, ticker: str, supply: int, precision: int) -> Non
         raise typer.Exit(1)
 
 
-@asset_app.command(
-    "issue-cfa",
+@issue_app.command(
+    "cfa",
     epilog=(
         "[bold]Examples[/bold]\n\n"
         "  Basic CFA with no media:\n"
-        '  [cyan]kaleido asset issue-cfa --name "My NFT" --supply 1[/cyan]\n\n'
+        '  [cyan]kaleido asset issue cfa --name "My NFT" --supply 1[/cyan]\n\n'
         "  With description and attached media file:\n"
-        '  [cyan]kaleido asset issue-cfa --name "Art Piece" --supply 100 --description "Limited series" --file ./art.png[/cyan]\n\n'
+        '  [cyan]kaleido asset issue cfa --name "Art Piece" --supply 100 --description "Limited series" --file ./art.png[/cyan]\n\n'
         "[dim]CFA = Collectible Fungible Asset.[/dim]"
     ),
 )
@@ -706,14 +713,14 @@ async def _asset_refresh(skip_sync: bool) -> None:
         raise typer.Exit(1)
 
 
-@asset_app.command(
-    "issue-uda",
+@issue_app.command(
+    "uda",
     epilog=(
         "[bold]Examples[/bold]\n\n"
         "  Issue a simple UDA (NFT):\n"
-        '  [cyan]kaleido asset issue-uda --ticker NFT1 --name "My NFT"[/cyan]\n\n'
+        '  [cyan]kaleido asset issue uda --ticker NFT1 --name "My NFT"[/cyan]\n\n'
         "  With a description and a media file:\n"
-        '  [cyan]kaleido asset issue-uda --ticker ART1 --name "Art NFT" --description "Limited edition" --file ./art.png[/cyan]\n\n'
+        '  [cyan]kaleido asset issue uda --ticker ART1 --name "Art NFT" --description "Limited edition" --file ./art.png[/cyan]\n\n'
         "[dim]UDA = Unique Digital Asset (non-fungible). Supply is always 1.[/dim]"
     ),
 )

@@ -198,7 +198,7 @@ def run_setup(
                 "Next Steps",
                 "1. kaleido node init\n"
                 "2. kaleido node unlock\n"
-                "3. kaleido node status\n"
+                "3. kaleido node info\n"
                 "4. kaleido wallet address",
                 style="green",
             )
@@ -214,7 +214,7 @@ def run_setup(
         else:
             print_panel(
                 "Next Steps",
-                "1. kaleido node status\n2. kaleido node unlock\n3. kaleido wallet balance",
+                "1. kaleido node info\n2. kaleido node unlock\n3. kaleido wallet balance",
                 style="green",
             )
     else:
