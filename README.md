@@ -1,0 +1,364 @@
+# Kaleido CLI
+
+A command-line interface for managing RGB Lightning Nodes and interacting with the [Kaleidoswap](https://kaleidoswap.com) protocol.
+
+## Overview
+
+`kaleido` covers two main areas:
+
+- **RGB Lightning Node (RLN)** — spin up Docker-based node environments, manage your BTC wallet, RGB assets, Lightning channels, peers, and payments.
+- **Kaleidoswap API** — query market data, create maker swap orders, run maker atomic swaps, and coordinate low-level local swap steps.
+
+---
+
+## Requirements
+
+- Python 3.10+
+- `curl` or `wget` for the one-line bootstrap installer
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+- Docker & Docker Compose (required for `node` commands)
+
+---
+
+## Installation
+
+### One command for macOS, Linux, and WSL
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kaleidoswap/kaleido-cli/master/install.sh | sh
+```
+
+Or with `wget`:
+
+```bash
+wget -qO- https://raw.githubusercontent.com/kaleidoswap/kaleido-cli/master/install.sh | sh
+```
+
+The bootstrap script downloads the latest `master` branch, prefers `uv tool install` when available, and falls back to `python -m pip install --user`.
+
+Then run:
+
+```bash
+kaleido setup
+```
+
+`kaleido setup` walks you through either:
+
+- a market-only setup that works without Docker
+- a local-node setup that creates a Docker environment for you
+
+### Alternative installers
+
+Install directly from a local checkout for development:
+
+```bash
+git clone https://github.com/kaleidoswap/kaleido-cli
+cd kaleido-cli
+./install.sh
+```
+
+Install without the shell bootstrap:
+
+```bash
+uv tool install git+https://github.com/kaleidoswap/kaleido-cli.git
+```
+
+For Windows or a cross-platform Python-based installer:
+
+```bash
+python install.py
+```
+
+For a local editable install with the existing Makefile helper:
+
+```bash
+make install
+```
+
+### Makefile targets
+
+| Command          | Description                               |
+|------------------|-------------------------------------------|
+| `make install`   | Install the current checkout via `uv tool` |
+| `make uninstall` | Remove the global installation            |
+| `make reinstall` | Uninstall then reinstall                  |
+
+---
+
+## Initial Configuration
+
+Configuration is stored in `~/.kaleido/config.json`.
+
+For first-time use, prefer:
+
+```bash
+kaleido setup
+```
+
+If you want to configure manually, use:
+
+```bash
+kaleido config show                              # view current config
+kaleido config set api-url https://api.kaleidoswap.com
+kaleido config set network signet
+kaleido config reset                             # reset to defaults
+```
+
+Override per-command with flags or environment variables:
+
+```bash
+kaleido --node-url http://localhost:3001 wallet balance
+kaleido --api-url https://api.kaleidoswap.com market pairs
+
+export KALEIDO_NODE_URL=http://localhost:3001
+export KALEIDO_API_URL=https://api.kaleidoswap.com
+```
+
+Valid config keys: `api-url`, `node-url`, `network`, `spawn-dir`
+
+---
+
+## Node Environments
+
+The CLI uses a **named environment** model. Each environment is an isolated Docker Compose setup with its own compose file and data volumes stored under a base directory (default: `~/.kaleido/spawn/`).
+
+```
+~/.kaleido/spawn/
+├── mainenv/
+│   ├── docker-compose.yml
+│   └── volumes/
+│       └── dataldk0/
+└── testenv/
+    ├── docker-compose.yml
+    └── volumes/
+        ├── dataldk0/
+        └── dataldk1/
+```
+
+### Creating an environment
+
+```bash
+kaleido node create
+# or give it a name directly:
+kaleido node create testenv
+```
+
+The wizard prompts for:
+
+1. **Base directory** — where all environments are stored (saved to config as `spawn-dir`)
+2. **Environment name** — becomes a subdirectory under the base dir
+3. **Node count** — number of RGB Lightning Nodes to spin up
+4. **Network** — `regtest`, `signet`, or `mainnet`
+5. **Node ports** — base daemon API port (3001+) and LDK peer port (9735+)
+6. **Start now** — whether to bring containers up immediately
+
+### Managing environments
+
+```bash
+kaleido node list                   # list all environments with their node URLs
+kaleido node up     <name>          # start containers (docker compose up -d)
+kaleido node stop   <name>          # stop containers (data preserved)
+kaleido node down   <name>          # stop and remove containers
+kaleido node ps     <name>          # show container status
+kaleido node logs   <name>          # stream all logs
+kaleido node logs   <name> --service bitcoind   # filter by service
+kaleido node clean  <name>          # delete all data volumes (irreversible)
+```
+
+`<name>` can be omitted when only one environment exists — it is auto-detected.
+
+### Switching between nodes
+
+Use `kaleido node use` to point the active `node-url` at any node in any environment:
+
+```bash
+kaleido node use testenv            # use node 1 of 'testenv' (port 3001)
+kaleido node use testenv --node 2   # use node 2 of 'testenv' (port 3002)
+```
+
+`kaleido node list` marks the currently active node with `●`:
+
+```
+Environments in ~/.kaleido/spawn:
+
+  testenv  →  ~/.kaleido/spawn/testenv
+    ● node 1: http://localhost:3001
+    ○ node 2: http://localhost:3002
+```
+
+### First-time node setup
+
+After creating and starting an environment:
+
+```bash
+kaleido node use testenv            # set the active node URL
+kaleido node init                   # initialise the wallet (once per node)
+kaleido node unlock                 # unlock the wallet (after every restart)
+kaleido node info                   # confirm the node is reachable
+```
+
+---
+
+## Command Reference
+
+All commands accept `--json` for machine-readable output:
+
+```bash
+kaleido --json market pairs
+```
+
+### `node` — Node lifecycle
+
+| Command                                   | Description                                         |
+|-------------------------------------------|-----------------------------------------------------|
+| `kaleido setup`                           | Guided first-run setup for market-only or local use |
+| `kaleido node create [name]`              | Wizard: configure and generate a named environment  |
+| `kaleido node list`                       | List all environments with node URLs                |
+| `kaleido node use <name> [--node N]`      | Set node-url to node N in an environment            |
+| `kaleido node up <name>`                  | Start containers (docker compose up -d)             |
+| `kaleido node stop <name>`                | Stop containers (data preserved)                    |
+| `kaleido node down <name>`                | Stop and remove containers + networks               |
+| `kaleido node ps <name>`                  | Show container status                               |
+| `kaleido node logs <name> [--service S]`  | Stream logs (optionally filtered by service)        |
+| `kaleido node clean <name>`               | Delete all data volumes (irreversible)              |
+| `kaleido node init`                       | Initialise node wallet (once after first start)     |
+| `kaleido node unlock`                     | Unlock wallet (after every restart)                 |
+| `kaleido node lock`                       | Lock the wallet                                     |
+| `kaleido node info`                       | Show detailed node + network info                   |
+| `kaleido node taker pubkey`               | Show the node's taker public key                    |
+| `kaleido node taker whitelist <swap>`     | Whitelist a swap on the taker side                  |
+
+### `wallet` — BTC wallet
+
+| Command                                  | Description                        |
+|------------------------------------------|------------------------------------|
+| `kaleido wallet address`                 | Get a new on-chain deposit address |
+| `kaleido wallet balance`                 | Show BTC balance                   |
+| `kaleido wallet send <amount> <address>` | Send on-chain BTC (sats)           |
+
+### `asset` — RGB assets
+
+| Command                              | Description                            |
+|--------------------------------------|----------------------------------------|
+| `kaleido asset list`                 | List all RGB assets held by the node   |
+| `kaleido asset balance <asset-id>`   | Show balance for a specific RGB asset  |
+| `kaleido asset metadata <asset-id>`  | Show metadata for a specific RGB asset |
+
+### `channel` — Lightning channels
+
+| Command                               | Description                      |
+|---------------------------------------|----------------------------------|
+| `kaleido channel list`                | List all Lightning channels      |
+| `kaleido channel open <peer>`         | Open a new channel               |
+| `kaleido channel close <channel-id>`  | Close a channel                  |
+
+### `peer` — Peer connections
+
+| Command                            | Description               |
+|------------------------------------|---------------------------|
+| `kaleido peer list`                | List connected peers      |
+| `kaleido peer connect <peer>`      | Connect to a peer         |
+| `kaleido peer disconnect <pubkey>` | Disconnect from a peer    |
+
+### `payment` — Lightning payments
+
+| Command                          | Description                             |
+|----------------------------------|-----------------------------------------|
+| `kaleido payment invoice`        | Create a BOLT11 invoice (BTC or RGB+LN) |
+| `kaleido payment send <invoice>` | Pay a BOLT11 invoice                    |
+| `kaleido payment list`           | List payment history                    |
+
+### `market` — Kaleidoswap market data
+
+| Command                           | Description                           |
+|-----------------------------------|---------------------------------------|
+| `kaleido market assets`           | List all tradeable assets             |
+| `kaleido market pairs`            | List all available trading pairs      |
+| `kaleido market quote <pair>`     | Get a swap quote for a trading pair   |
+
+```bash
+# Send BTC via Lightning, receive USDT via RGB Lightning
+kaleido market quote BTC/USDT --from-amount 100000 --from-layer BTC_LN --to-layer RGB_LN
+```
+
+### `swap` — Grouped swap flows
+
+`swap` is split by scope:
+
+- `kaleido swap order ...` for maker swap-order flows on the Kaleidoswap server
+- `kaleido swap atomic ...` for atomic swaps against the Kaleidoswap maker server
+- `kaleido swap node ...` for low-level local RLN node swap flows
+
+| Command                             | Description                                              |
+|-------------------------------------|----------------------------------------------------------|
+| `kaleido market quote <pair>`       | Get a maker quote for a trading pair                     |
+| `kaleido swap order create <pair>`  | Create a maker swap order from a live quote              |
+| `kaleido swap order status <id>`    | Check the status of a maker swap order                   |
+| `kaleido swap order history`        | List maker swap-order history                            |
+| `kaleido swap atomic run <pair>`    | Run atomic init -> whitelist -> execute in one command   |
+| `kaleido swap atomic init <pair>`   | Initialize an atomic swap against the maker server       |
+| `kaleido swap atomic execute`       | Execute an atomic swap against the maker server          |
+| `kaleido swap atomic status <hash>` | Check atomic swap status against the maker server        |
+| `kaleido swap node init`            | Initialize a low-level local node swap                   |
+| `kaleido swap node whitelist`       | Whitelist a swap on the local taker node                 |
+| `kaleido swap node execute`         | Execute a low-level local node swap                      |
+| `kaleido swap node status <hash>`   | Check local node swap status by payment hash             |
+| `kaleido swap node list`            | List swaps known to the local RLN node                   |
+
+### `config` — CLI configuration
+
+| Command                            | Description                     |
+|------------------------------------|---------------------------------|
+| `kaleido config show`              | Display current configuration   |
+| `kaleido config set <key> <value>` | Set a configuration value       |
+| `kaleido config reset`             | Reset configuration to defaults |
+| `kaleido config path`              | Print the config file path      |
+
+---
+
+## Quick Start
+
+```bash
+# 1. Install
+curl -fsSL https://raw.githubusercontent.com/kaleidoswap/kaleido-cli/master/install.sh | sh
+
+# 2. Run the guided setup
+kaleido setup
+
+# 3. If you chose a local node, initialise and unlock the wallet
+kaleido node init
+kaleido node unlock
+
+# 4. If you chose a local node, confirm it is healthy
+kaleido node info
+
+# 5. If you chose a local node, get a funding address
+kaleido wallet address
+
+# 6. Browse available trading pairs
+kaleido market pairs
+
+# 7. Get a swap quote
+kaleido market quote BTC/USDT --from-amount 100000
+```
+
+For a non-interactive local setup with defaults:
+
+```bash
+kaleido setup --mode local --create-node --defaults
+```
+
+### Working with multiple nodes
+
+```bash
+# Create a second environment on different ports
+kaleido node create stagingenv
+
+# See all environments and which node is active
+kaleido node list
+
+# Switch to node 2 in the staging environment
+kaleido node use stagingenv --node 2
+kaleido node unlock
+kaleido wallet balance
+```
