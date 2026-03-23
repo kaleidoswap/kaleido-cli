@@ -276,6 +276,7 @@ kaleido market quote BTC/USDT --from-amount 100000 --from-layer BTC_LN --to-laye
 | `kaleido swap order create <pair>`  | Create a maker swap order from a live quote              |
 | `kaleido swap order status <id>`    | Check the status of a maker swap order                   |
 | `kaleido swap order history`        | List maker swap-order history                            |
+| `kaleido swap atomic run <pair>`    | Run atomic init -> whitelist -> execute in one command   |
 | `kaleido swap atomic init <pair>`   | Initialize an atomic swap against the maker server       |
 | `kaleido swap atomic execute`       | Execute an atomic swap against the maker server          |
 | `kaleido swap atomic status <hash>` | Check atomic swap status against the maker server        |

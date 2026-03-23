@@ -505,6 +505,114 @@ async def _atomic_status(payment_hash: str) -> None:
         raise typer.Exit(1)
 
 
+@atomic_app.command(
+    "run",
+    epilog=(
+        "[bold]Examples[/bold]\n\n"
+        "  Run an atomic swap in one command using your local taker node:\n"
+        "  [cyan]kaleido swap atomic run BTC/USDT --to-amount 5000000[/cyan]\n\n"
+        "  Non-interactive flow with an explicit taker pubkey:\n"
+        "  [cyan]kaleido swap atomic run BTC/USDT --from-amount 100000 --from-layer BTC_LN "
+        "--to-layer RGB_LN --taker-pubkey 03ab... --yes[/cyan]\n\n"
+        "[dim]This wrapper automates atomic init, local taker whitelist, and atomic execute.[/dim]"
+    ),
+)
+def atomic_run(
+    pair: Annotated[str | None, typer.Argument(help="Trading pair in BASE/QUOTE format, e.g. BTC/USDT.")] = None,
+    from_amount: Annotated[int | None, typer.Option("--from-amount", help="Amount to send (raw units). Provide this OR --to-amount.")] = None,
+    to_amount: Annotated[int | None, typer.Option("--to-amount", help="Amount to receive (raw units). Provide this OR --from-amount.")] = None,
+    from_layer: Annotated[str, typer.Option("--from-layer", help="Source layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")] = "BTC_LN",
+    to_layer: Annotated[str, typer.Option("--to-layer", help="Destination layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")] = "RGB_LN",
+    taker_pubkey: Annotated[str | None, typer.Option("--taker-pubkey", help="Taker node pubkey. Defaults to the local node taker pubkey.")] = None,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip the confirmation prompt in interactive mode.")] = False,
+) -> None:
+    """Run an atomic swap end-to-end using the local node as taker."""
+    resolved_pair = _resolve_pair(pair)
+    resolved_from_amount, resolved_to_amount = _resolve_amount_pair(
+        from_amount, to_amount, prompt_prefix="Atomic swap", default_choice="R"
+    )
+    asyncio.run(
+        _atomic_run(
+            resolved_pair,
+            resolved_from_amount,
+            resolved_to_amount,
+            from_layer,
+            to_layer,
+            taker_pubkey,
+            yes,
+        )
+    )
+
+
+async def _atomic_run(
+    pair: str,
+    from_amount: int | None,
+    to_amount: int | None,
+    from_layer: str,
+    to_layer: str,
+    taker_pubkey_override: str | None,
+    yes: bool,
+) -> None:
+    try:
+        client = get_client(require_node=True)
+        quote = await _fetch_quote(pair, from_amount, to_amount, from_layer, to_layer)
+        init_resp: SwapResponse = await client.maker.init_swap(
+            SwapRequest(
+                rfq_id=quote.rfq_id,
+                from_asset=quote.from_asset.asset_id,
+                from_amount=quote.from_asset.amount,
+                to_asset=quote.to_asset.asset_id,
+                to_amount=quote.to_asset.amount,
+            )
+        )
+        resolved_taker_pubkey = taker_pubkey_override or await client.rln.get_taker_pubkey()
+
+        if not yes and is_interactive():
+            confirmed = typer.confirm(
+                "Whitelist this atomic swap on the local taker node and execute it now?",
+                default=True,
+            )
+            if not confirmed:
+                print_error("Swap cancelled after atomic init.")
+                raise typer.Exit(0)
+
+        await client.rln.whitelist_swap(TakerRequest(swapstring=init_resp.swapstring))
+        execute_resp: ConfirmSwapResponse = await client.maker.execute_swap(
+            ConfirmSwapRequest(
+                swapstring=init_resp.swapstring,
+                taker_pubkey=resolved_taker_pubkey,
+                payment_hash=init_resp.payment_hash,
+            )
+        )
+
+        if is_json_mode():
+            print_json(
+                {
+                    "init": init_resp.model_dump(),
+                    "whitelisted": True,
+                    "taker_pubkey": resolved_taker_pubkey,
+                    "execute": execute_resp.model_dump(),
+                }
+            )
+        else:
+            print_success(f"Atomic swap initialized: {init_resp.payment_hash}")
+            output_model(init_resp, title="Atomic Swap Init")
+            print_success("Swap whitelisted on local taker node")
+            print_success("Atomic swap execution submitted")
+            output_model(
+                {
+                    "taker_pubkey": resolved_taker_pubkey,
+                    **execute_resp.model_dump(),
+                },
+                title="Atomic Swap Execute",
+            )
+    except typer.Exit:
+        raise
+    except Exception as e:
+        print_error(f"Error: {e}")
+        raise typer.Exit(1)
+
+
 @node_app.command(
     "init",
     epilog=(
