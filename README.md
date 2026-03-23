@@ -7,7 +7,7 @@ A command-line interface for managing RGB Lightning Nodes and interacting with t
 `kaleido` covers two main areas:
 
 - **RGB Lightning Node (RLN)** — spin up Docker-based node environments, manage your BTC wallet, RGB assets, Lightning channels, peers, and payments.
-- **Kaleidoswap API** — query market data (assets, trading pairs, quotes) and execute atomic RGB+Lightning swaps.
+- **Kaleidoswap API** — query market data, create maker swap orders, run maker atomic swaps, and coordinate low-level local swap steps.
 
 ---
 
@@ -261,13 +261,29 @@ kaleido --json market pairs
 kaleido market quote BTC/USDT --from-amount 100000 --from-layer BTC_LN --to-layer RGB_LN
 ```
 
-### `swap` — Atomic swaps
+### `swap` — Grouped swap flows
 
-| Command                     | Description                                 |
-|-----------------------------|---------------------------------------------|
-| `kaleido swap quote <pair>` | Get a swap quote (alias for `market quote`) |
-| `kaleido swap history`      | List past swaps                             |
-| `kaleido swap status <id>`  | Check the status of a specific swap         |
+`swap` is split by scope:
+
+- `kaleido swap order ...` for maker swap-order flows on the Kaleidoswap server
+- `kaleido swap atomic ...` for atomic swaps against the Kaleidoswap maker server
+- `kaleido swap node ...` for low-level local RLN node swap flows
+
+| Command                             | Description                                              |
+|-------------------------------------|----------------------------------------------------------|
+| `kaleido swap order quote <pair>`   | Get a maker quote for a trading pair                     |
+| `kaleido swap order create <pair>`  | Create a maker swap order from a live quote              |
+| `kaleido swap order status <id>`    | Check the status of a maker swap order                   |
+| `kaleido swap order history`        | List maker swap-order history                            |
+| `kaleido swap atomic init <pair>`   | Initialize an atomic swap against the maker server       |
+| `kaleido swap atomic execute`       | Execute an atomic swap against the maker server          |
+| `kaleido swap atomic status <hash>` | Check atomic swap status against the maker server        |
+| `kaleido swap node init`            | Initialize a low-level local node swap                   |
+| `kaleido swap node whitelist`       | Whitelist a swap on the local taker node                 |
+| `kaleido swap node execute`         | Execute a low-level local node swap                      |
+| `kaleido swap node status <hash>`   | Check local node swap status by payment hash             |
+| `kaleido swap node list`            | List swaps known to the local RLN node                   |
+| `kaleido swap node run`             | Run maker-init -> whitelist -> maker-execute in one step |
 
 ### `config` — CLI configuration
 

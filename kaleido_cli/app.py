@@ -178,7 +178,11 @@ app.add_typer(
     payment_app, name="payment", help="Lightning payments — pay, invoice, keysend, decode, status."
 )
 app.add_typer(market_app, name="market", help="Kaleidoswap market data — assets, pairs, routes, quotes, analytics.")
-app.add_typer(swap_app, name="swap", help="Atomic RGB+LN swaps — quote, run, execute, history.")
+app.add_typer(
+    swap_app,
+    name="swap",
+    help="Swap flows grouped by scope: maker order flow, maker atomic flow, and local node flow.",
+)
 app.add_typer(lsp_app, name="lsp", help="LSP (Lightning Service Provider) — info, channel orders, fees.")
 app.add_typer(maker_app, name="maker", help="Maker swap operations — init and execute atomic swaps.")
 app.add_typer(taker_app, name="taker", help="Taker swap operations — pubkey and swap whitelisting.")
