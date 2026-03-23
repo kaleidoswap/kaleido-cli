@@ -155,9 +155,6 @@ def setup_command(
 from .commands.asset import asset_app  # noqa: E402
 from .commands.channel import channel_app  # noqa: E402
 from .commands.config_cmd import config_app  # noqa: E402
-from .commands.lsp import lsp_app  # noqa: E402
-from .commands.maker import maker_app  # noqa: E402
-from .commands.taker import taker_app  # noqa: E402
 from .commands.market import market_app  # noqa: E402
 from .commands.node import node_app  # noqa: E402
 from .commands.payment import payment_app  # noqa: E402
@@ -171,8 +168,8 @@ app.add_typer(
 app.add_typer(
     wallet_app, name="wallet", help="BTC wallet — balance, addresses, send, UTXOs, backup, restore."
 )
-app.add_typer(asset_app, name="asset", help="RGB assets — list, issue (NIA/CFA/UDA), send, invoices, transfers.")
-app.add_typer(channel_app, name="channel", help="Lightning channels — list, open, close.")
+app.add_typer(asset_app, name="asset", help="RGB assets — list, issue by schema, send, invoices, transfers.")
+app.add_typer(channel_app, name="channel", help="Lightning channels — list, open, close, and LSP order flow.")
 app.add_typer(peer_app, name="peer", help="Peer connections — list, connect, disconnect.")
 app.add_typer(
     payment_app, name="payment", help="Lightning payments — pay, invoice, keysend, decode, status."
@@ -183,9 +180,6 @@ app.add_typer(
     name="swap",
     help="Swap flows grouped by scope: maker order flow, maker atomic flow, and local node flow.",
 )
-app.add_typer(lsp_app, name="lsp", help="LSP (Lightning Service Provider) — info, channel orders, fees.")
-app.add_typer(maker_app, name="maker", help="Maker swap operations — init and execute atomic swaps.")
-app.add_typer(taker_app, name="taker", help="Taker swap operations — pubkey and swap whitelisting.")
 app.add_typer(config_app, name="config", help="CLI configuration stored in ~/.kaleido/config.json.")
 
 

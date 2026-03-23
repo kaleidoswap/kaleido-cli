@@ -271,7 +271,7 @@ kaleido market quote BTC/USDT --from-amount 100000 --from-layer BTC_LN --to-laye
 
 | Command                             | Description                                              |
 |-------------------------------------|----------------------------------------------------------|
-| `kaleido swap order quote <pair>`   | Get a maker quote for a trading pair                     |
+| `kaleido market quote <pair>`       | Get a maker quote for a trading pair                     |
 | `kaleido swap order create <pair>`  | Create a maker swap order from a live quote              |
 | `kaleido swap order status <id>`    | Check the status of a maker swap order                   |
 | `kaleido swap order history`        | List maker swap-order history                            |

@@ -160,51 +160,6 @@ async def _fetch_quote(
 
 
 @order_app.command(
-    "quote",
-    epilog=(
-        "[bold]Examples[/bold]\n\n"
-        "  How much BTC to send to receive 5 USDT over RGB Lightning:\n"
-        "  [cyan]kaleido swap order quote BTC/USDT --to-amount 5000000[/cyan]\n\n"
-        "  Send 100 000 raw units and see how much USDT you get:\n"
-        "  [cyan]kaleido swap order quote BTC/USDT --from-amount 100000[/cyan]"
-    ),
-)
-def order_quote(
-    pair: Annotated[str | None, typer.Argument(help="Trading pair in BASE/QUOTE format, e.g. BTC/USDT.")] = None,
-    from_amount: Annotated[int | None, typer.Option("--from-amount", help="Amount to send (raw units). Provide this OR --to-amount.")] = None,
-    to_amount: Annotated[int | None, typer.Option("--to-amount", help="Amount to receive (raw units). Provide this OR --from-amount.")] = None,
-    from_layer: Annotated[str, typer.Option("--from-layer", help="Source layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")] = "BTC_LN",
-    to_layer: Annotated[str, typer.Option("--to-layer", help="Destination layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")] = "RGB_LN",
-) -> None:
-    """Get a maker swap-order quote."""
-    resolved_pair = _resolve_pair(pair)
-    resolved_from_amount, resolved_to_amount = _resolve_amount_pair(
-        from_amount, to_amount, prompt_prefix="Quote", default_choice="S"
-    )
-    asyncio.run(_order_quote(resolved_pair, resolved_from_amount, resolved_to_amount, from_layer, to_layer))
-
-
-async def _order_quote(
-    pair: str,
-    from_amount: int | None,
-    to_amount: int | None,
-    from_layer: str,
-    to_layer: str,
-) -> None:
-    try:
-        quote = await _fetch_quote(pair, from_amount, to_amount, from_layer, to_layer)
-        if is_json_mode():
-            print_json(quote.model_dump())
-        else:
-            output_model(quote, title=f"Quote — {pair.upper()}")
-    except typer.Exit:
-        raise
-    except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
-
-
-@order_app.command(
     "create",
     epilog=(
         "[bold]Examples[/bold]\n\n"
@@ -484,6 +439,11 @@ def atomic_execute(
     resolved_swapstring = _resolve_required_text(swapstring, "Swap string", "--swapstring")
     resolved_taker_pubkey = _resolve_required_text(taker_pubkey, "Taker pubkey", "--taker-pubkey")
     resolved_payment_hash = _resolve_required_text(payment_hash, "Payment hash", "--payment-hash")
+    if is_interactive() and not auto_whitelist:
+        auto_whitelist = typer.confirm(
+            "Auto-whitelist on the local taker node before executing?",
+            default=False,
+        )
     asyncio.run(_atomic_execute(resolved_swapstring, resolved_taker_pubkey, resolved_payment_hash, auto_whitelist))
 
 

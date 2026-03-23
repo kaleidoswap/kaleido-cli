@@ -441,22 +441,6 @@ def node_clean(
 # ---------------------------------------------------------------------------
 
 
-@node_app.command("status")
-def node_status() -> None:
-    """Check node health and display basic info."""
-    asyncio.run(_node_status())
-
-
-async def _node_status() -> None:
-    try:
-        client = get_client(require_node=True)
-        info = await client.rln.get_node_info()
-        output_model(info, title="Node Info")
-    except Exception as e:
-        print_error(f"Could not reach node: {e}")
-        raise typer.Exit(1)
-
-
 @node_app.command("info")
 def node_info() -> None:
     """Display detailed node information."""
