@@ -38,8 +38,6 @@ Repository = "https://github.com/kaleidoswap/kaleido-cli"
 packages = ["kaleido_cli"]
 
 [tool.pyright]
-venvPath = "."
-venv = ".venv"
 pythonVersion = "3.10"
 
 [tool.ruff]
