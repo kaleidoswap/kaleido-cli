@@ -564,7 +564,9 @@ def node_init(
     if password is not None:
         resolved_password = password
     else:
-        resolved_password = typer.prompt("Wallet password", hide_input=True, confirmation_prompt=True)
+        resolved_password = typer.prompt(
+            "Wallet password", hide_input=True, confirmation_prompt=True
+        )
     asyncio.run(_node_init(resolved_password, mnemonic))
 
 
@@ -573,9 +575,7 @@ async def _node_init(password: str, mnemonic: str | None) -> None:
 
     try:
         client = get_client(require_node=True)
-        response = await client.rln.init_wallet(
-            InitRequest(password=password, mnemonic=mnemonic)
-        )
+        response = await client.rln.init_wallet(InitRequest(password=password, mnemonic=mnemonic))
         print_success("Wallet initialized.")
         output_model(response, title="Init Response")
     except Exception as e:
@@ -664,7 +664,9 @@ def node_unlock(
         )
         if not use_defaults:
             bitcoind_user = typer.prompt("bitcoind RPC username", default=bitcoind_user)
-            bitcoind_pass = typer.prompt("bitcoind RPC password", default=bitcoind_pass, hide_input=True)
+            bitcoind_pass = typer.prompt(
+                "bitcoind RPC password", default=bitcoind_pass, hide_input=True
+            )
             bitcoind_host = typer.prompt("bitcoind RPC host", default=bitcoind_host)
             bitcoind_port = typer.prompt("bitcoind RPC port", default=bitcoind_port, type=int)
             indexer_url = typer.prompt("Electrs indexer URL", default=indexer_url)

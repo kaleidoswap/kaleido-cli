@@ -237,11 +237,15 @@ def wallet_create_utxos(
     """Create UTXOs for RGB asset operations."""
     if is_interactive():
         if num is None:
-            raw = typer.prompt("[OPTIONAL] Number of UTXOs to create (Enter for node default)", default="")
+            raw = typer.prompt(
+                "[OPTIONAL] Number of UTXOs to create (Enter for node default)", default=""
+            )
             if raw.strip():
                 num = int(raw.strip())
         if size is None:
-            raw = typer.prompt("[OPTIONAL] Size of each UTXO in satoshis (Enter for node default)", default="")
+            raw = typer.prompt(
+                "[OPTIONAL] Size of each UTXO in satoshis (Enter for node default)", default=""
+            )
             if raw.strip():
                 size = int(raw.strip())
 
@@ -355,7 +359,9 @@ def wallet_backup(
     if password is not None:
         resolved_password = password
     else:
-        resolved_password = typer.prompt("Backup password", hide_input=True, confirmation_prompt=True)
+        resolved_password = typer.prompt(
+            "Backup password", hide_input=True, confirmation_prompt=True
+        )
 
     asyncio.run(_wallet_backup(resolved_path, resolved_password))
 
@@ -450,6 +456,8 @@ def wallet_change_password(
     if new_password is None:
         new_password = typer.prompt("New password", hide_input=True, confirmation_prompt=True)
 
+    assert old_password is not None
+    assert new_password is not None
     asyncio.run(_wallet_change_password(old_password, new_password))
 
 
@@ -488,13 +496,13 @@ def wallet_estimate_fee(
 async def _wallet_estimate_fee(blocks: int) -> None:
     try:
         client = get_client(require_node=True)
-        resp: EstimateFeeResponse = await client.rln.estimate_fee(
-            EstimateFeeRequest(blocks=blocks)
-        )
+        resp: EstimateFeeResponse = await client.rln.estimate_fee(EstimateFeeRequest(blocks=blocks))
         if is_json_mode():
             print_json(resp.model_dump())
         else:
-            print_success(f"Estimated fee rate: {resp.fee_rate} sat/vbyte (target: {blocks} blocks)")
+            print_success(
+                f"Estimated fee rate: {resp.fee_rate} sat/vbyte (target: {blocks} blocks)"
+            )
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)

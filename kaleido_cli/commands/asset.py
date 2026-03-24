@@ -372,11 +372,15 @@ def asset_invoice(
         raise typer.Exit(1)
 
     if is_interactive() and amount is None:
-        raw = typer.prompt("[OPTIONAL] Amount to request (Enter for any-amount invoice)", default="")
+        raw = typer.prompt(
+            "[OPTIONAL] Amount to request (Enter for any-amount invoice)", default=""
+        )
         if raw.strip():
             amount = int(raw.strip())
 
-    asyncio.run(_asset_invoice(resolved_asset_id, amount, min_confirmations, duration_seconds, witness))
+    asyncio.run(
+        _asset_invoice(resolved_asset_id, amount, min_confirmations, duration_seconds, witness)
+    )
 
 
 async def _asset_invoice(
@@ -392,7 +396,9 @@ async def _asset_invoice(
             RgbInvoiceRequest(
                 asset_id=asset_id,
                 assignment=(
-                    AssignmentFungible(type="Fungible", value=amount) if amount is not None else None
+                    AssignmentFungible(type="Fungible", value=amount)
+                    if amount is not None
+                    else None
                 ),
                 min_confirmations=min_confirmations,
                 duration_seconds=duration_seconds,
@@ -605,7 +611,9 @@ async def _asset_send_batch(json_file: str) -> None:
 
         recipient_map = {}
         for asset_id, recipients in data.get("recipient_map", {}).items():
-            recipient_map[asset_id] = [Recipient.model_validate(recipient) for recipient in recipients]
+            recipient_map[asset_id] = [
+                Recipient.model_validate(recipient) for recipient in recipients
+            ]
 
         body = SendRgbRequest(
             recipient_map=recipient_map,
@@ -849,7 +857,9 @@ def asset_fail_transfers(
     asyncio.run(_asset_fail_transfers(batch_idx, no_asset_only, skip_sync))
 
 
-async def _asset_fail_transfers(batch_idx: int | None, no_asset_only: bool, skip_sync: bool) -> None:
+async def _asset_fail_transfers(
+    batch_idx: int | None, no_asset_only: bool, skip_sync: bool
+) -> None:
     try:
         client = get_client(require_node=True)
         resp: FailTransfersResponse = await client.rln.fail_transfers(

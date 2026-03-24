@@ -5,8 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Annotated
-from typing import Any
+from typing import Annotated, Any
 
 import typer
 from kaleido_sdk import (
@@ -213,14 +212,20 @@ def _resolve_channel_order_params(
     resolved_email = _normalize_optional_text(email)
 
     if is_interactive():
-        if resolved_asset_id is None and typer.confirm("Attach an RGB asset to the channel order?", default=False):
+        if resolved_asset_id is None and typer.confirm(
+            "Attach an RGB asset to the channel order?", default=False
+        ):
             resolved_asset_id = _prompt_optional_text("Asset ID (rgb:...)")
 
         if resolved_asset_id is not None:
             if lsp_asset_amount is None:
-                lsp_asset_amount = _prompt_optional_int("[OPTIONAL] LSP RGB asset amount (Enter to skip)")
+                lsp_asset_amount = _prompt_optional_int(
+                    "[OPTIONAL] LSP RGB asset amount (Enter to skip)"
+                )
             if client_asset_amount is None:
-                client_asset_amount = _prompt_optional_int("[OPTIONAL] Client RGB asset amount (Enter to skip)")
+                client_asset_amount = _prompt_optional_int(
+                    "[OPTIONAL] Client RGB asset amount (Enter to skip)"
+                )
         else:
             lsp_asset_amount = None
             client_asset_amount = None
@@ -228,15 +233,21 @@ def _resolve_channel_order_params(
         announce_channel = typer.confirm("Announce channel publicly?", default=announce_channel)
 
         if resolved_token is None:
-            resolved_token = _prompt_optional_text("[OPTIONAL] Authentication token (Enter to skip)")
+            resolved_token = _prompt_optional_text(
+                "[OPTIONAL] Authentication token (Enter to skip)"
+            )
         if resolved_refund_onchain_address is None:
-            resolved_refund_onchain_address = _prompt_optional_text("[OPTIONAL] Refund onchain address (Enter to skip)")
+            resolved_refund_onchain_address = _prompt_optional_text(
+                "[OPTIONAL] Refund onchain address (Enter to skip)"
+            )
         if resolved_rfq_id is None:
             resolved_rfq_id = _prompt_optional_text("[OPTIONAL] RFQ ID (Enter to skip)")
         if resolved_email is None:
             resolved_email = _prompt_optional_text("[OPTIONAL] Contact email (Enter to skip)")
 
-    if (lsp_asset_amount is not None or client_asset_amount is not None) and resolved_asset_id is None:
+    if (
+        lsp_asset_amount is not None or client_asset_amount is not None
+    ) and resolved_asset_id is None:
         print_error("--lsp-asset-amount and --client-asset-amount require --asset-id.")
         raise typer.Exit(1)
 
@@ -281,7 +292,9 @@ async def _create_channel_order(client: Any, params: ChannelOrderParams) -> Chan
     return await _submit_channel_order(client, _build_channel_order_request(params))
 
 
-async def _get_channel_order(client: Any, order_id: str, access_token: str = "") -> ChannelOrderResponse:
+async def _get_channel_order(
+    client: Any, order_id: str, access_token: str = ""
+) -> ChannelOrderResponse:
     return await _fetch_channel_order(
         client,
         OrderRequest(order_id=order_id, access_token=access_token),
@@ -795,11 +808,15 @@ def channel_estimate_fees(
     ] = None,
     required_channel_confirmations: Annotated[
         int,
-        typer.Option("--confirmations", help="Required confirmations before channel is considered open."),
+        typer.Option(
+            "--confirmations", help="Required confirmations before channel is considered open."
+        ),
     ] = 6,
     funding_confirms_within_blocks: Annotated[
         int,
-        typer.Option("--funding-within", help="Number of blocks within which funding must confirm."),
+        typer.Option(
+            "--funding-within", help="Number of blocks within which funding must confirm."
+        ),
     ] = 144,
     channel_expiry_blocks: Annotated[
         int,
