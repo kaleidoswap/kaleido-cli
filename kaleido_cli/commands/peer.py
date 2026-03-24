@@ -42,7 +42,9 @@ async def _peer_list() -> None:
         if is_json_mode():
             print_json(resp.model_dump())
             return
-        output_collection("Peers", [p.model_dump() for p in (resp.peers or [])], item_title="Peer — {index}")
+        output_collection(
+            "Peers", [p.model_dump() for p in (resp.peers or [])], item_title="Peer — {index}"
+        )
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)

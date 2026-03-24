@@ -173,24 +173,61 @@ async def _fetch_quote(
     ),
 )
 def order_create(
-    pair: Annotated[str | None, typer.Argument(help="Trading pair in BASE/QUOTE format, e.g. BTC/USDT.")] = None,
-    from_amount: Annotated[int | None, typer.Option("--from-amount", help="Amount to send (raw units). Provide this OR --to-amount.")] = None,
-    to_amount: Annotated[int | None, typer.Option("--to-amount", help="Amount to receive (raw units). Provide this OR --from-amount.")] = None,
-    from_layer: Annotated[str, typer.Option("--from-layer", help="Source layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")] = "BTC_LN",
-    to_layer: Annotated[str, typer.Option("--to-layer", help="Destination layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")] = "RGB_LN",
-    receiver_address: Annotated[str | None, typer.Option("--receiver-address", help="Destination address/invoice for receiving the payout.")] = None,
-    receiver_format: Annotated[str | None, typer.Option("--receiver-format", help="Receiver format, e.g. BOLT11 or RGB_INVOICE.")] = None,
-    min_onchain_conf: Annotated[int, typer.Option("--min-onchain-conf", help="Minimum confirmations for onchain deposits.")] = 1,
-    refund_address: Annotated[str | None, typer.Option("--refund-address", help="Optional refund address for onchain deposits.")] = None,
-    email: Annotated[str | None, typer.Option("--email", help="Optional email for order notifications.")] = None,
+    pair: Annotated[
+        str | None, typer.Argument(help="Trading pair in BASE/QUOTE format, e.g. BTC/USDT.")
+    ] = None,
+    from_amount: Annotated[
+        int | None,
+        typer.Option(
+            "--from-amount", help="Amount to send (raw units). Provide this OR --to-amount."
+        ),
+    ] = None,
+    to_amount: Annotated[
+        int | None,
+        typer.Option(
+            "--to-amount", help="Amount to receive (raw units). Provide this OR --from-amount."
+        ),
+    ] = None,
+    from_layer: Annotated[
+        str, typer.Option("--from-layer", help="Source layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")
+    ] = "BTC_LN",
+    to_layer: Annotated[
+        str, typer.Option("--to-layer", help="Destination layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")
+    ] = "RGB_LN",
+    receiver_address: Annotated[
+        str | None,
+        typer.Option(
+            "--receiver-address", help="Destination address/invoice for receiving the payout."
+        ),
+    ] = None,
+    receiver_format: Annotated[
+        str | None,
+        typer.Option("--receiver-format", help="Receiver format, e.g. BOLT11 or RGB_INVOICE."),
+    ] = None,
+    min_onchain_conf: Annotated[
+        int, typer.Option("--min-onchain-conf", help="Minimum confirmations for onchain deposits.")
+    ] = 1,
+    refund_address: Annotated[
+        str | None,
+        typer.Option("--refund-address", help="Optional refund address for onchain deposits."),
+    ] = None,
+    email: Annotated[
+        str | None, typer.Option("--email", help="Optional email for order notifications.")
+    ] = None,
 ) -> None:
     """Create a maker swap order from a live quote."""
     resolved_pair = _resolve_pair(pair)
     resolved_from_amount, resolved_to_amount = _resolve_amount_pair(
         from_amount, to_amount, prompt_prefix="Order", default_choice="R"
     )
-    resolved_receiver_address = _resolve_required_text(receiver_address, "Receiver address / invoice", "--receiver-address")
-    resolved_receiver_format = _resolve_required_text(receiver_format, "Receiver format (e.g. BOLT11, RGB_INVOICE, BTC_ADDRESS)", "--receiver-format")
+    resolved_receiver_address = _resolve_required_text(
+        receiver_address, "Receiver address / invoice", "--receiver-address"
+    )
+    resolved_receiver_format = _resolve_required_text(
+        receiver_format,
+        "Receiver format (e.g. BOLT11, RGB_INVOICE, BTC_ADDRESS)",
+        "--receiver-format",
+    )
     asyncio.run(
         _order_create(
             resolved_pair,
@@ -258,8 +295,13 @@ async def _order_create(
 def order_decide(
     order_id: Annotated[str | None, typer.Argument(help="Swap order ID.")] = None,
     accept: Annotated[bool, typer.Option("--accept", help="Accept the new quoted rate.")] = False,
-    reject: Annotated[bool, typer.Option("--reject", help="Reject the new quoted rate and request refund.")] = False,
-    access_token: Annotated[str, typer.Option("--access-token", help="Optional access token returned for the swap order.")] = "",
+    reject: Annotated[
+        bool, typer.Option("--reject", help="Reject the new quoted rate and request refund.")
+    ] = False,
+    access_token: Annotated[
+        str,
+        typer.Option("--access-token", help="Optional access token returned for the swap order."),
+    ] = "",
 ) -> None:
     """Submit a rate decision for a pending maker swap order."""
     resolved_order_id = _resolve_required_text(order_id, "Swap order ID", "ORDER_ID argument")
@@ -270,7 +312,9 @@ def order_decide(
 async def _order_decide(order_id: str, accept: bool, access_token: str) -> None:
     try:
         client = get_client()
-        body = SwapOrderRateDecisionRequest(order_id=order_id, access_token=access_token, accept_new_rate=accept)
+        body = SwapOrderRateDecisionRequest(
+            order_id=order_id, access_token=access_token, accept_new_rate=accept
+        )
         resp: SwapOrderRateDecisionResponse = await client.maker.submit_rate_decision(body)
         if is_json_mode():
             print_json(resp.model_dump())
@@ -288,7 +332,10 @@ async def _order_decide(order_id: str, accept: bool, access_token: str) -> None:
 )
 def order_status(
     order_id: Annotated[str, typer.Argument(help="Full swap order ID to look up.")],
-    access_token: Annotated[str, typer.Option("--access-token", help="Optional access token returned for the swap order.")] = "",
+    access_token: Annotated[
+        str,
+        typer.Option("--access-token", help="Optional access token returned for the swap order."),
+    ] = "",
 ) -> None:
     """Check the status of a maker swap order."""
     asyncio.run(_order_status(order_id, access_token))
@@ -326,8 +373,16 @@ async def _order_status(order_id: str, access_token: str) -> None:
     ),
 )
 def order_history(
-    status: Annotated[str | None, typer.Option("--status", help="Filter by status: OPEN, PENDING_PAYMENT, PAID, EXECUTING, FILLED, CANCELLED, EXPIRED, FAILED, PENDING_RATE_DECISION.")] = None,
-    limit: Annotated[int, typer.Option("--limit", help="Maximum number of results to return.")] = 20,
+    status: Annotated[
+        str | None,
+        typer.Option(
+            "--status",
+            help="Filter by status: OPEN, PENDING_PAYMENT, PAID, EXECUTING, FILLED, CANCELLED, EXPIRED, FAILED, PENDING_RATE_DECISION.",
+        ),
+    ] = None,
+    limit: Annotated[
+        int, typer.Option("--limit", help="Maximum number of results to return.")
+    ] = 20,
 ) -> None:
     """Show maker swap-order history."""
     asyncio.run(_order_history(status, limit))
@@ -336,7 +391,9 @@ def order_history(
 async def _order_history(status: str | None, limit: int) -> None:
     try:
         client = get_client()
-        resp: OrderHistoryResponse = await client.maker.get_order_history(status=status, limit=limit)
+        resp: OrderHistoryResponse = await client.maker.get_order_history(
+            status=status, limit=limit
+        )
         if is_json_mode():
             print_json(resp.model_dump())
             return
@@ -365,18 +422,36 @@ async def _order_history(status: str | None, limit: int) -> None:
     ),
 )
 def atomic_init(
-    pair: Annotated[str | None, typer.Argument(help="Trading pair in BASE/QUOTE format, e.g. BTC/USDT.")] = None,
-    from_amount: Annotated[int | None, typer.Option("--from-amount", help="Amount to send (raw units). Provide this OR --to-amount.")] = None,
-    to_amount: Annotated[int | None, typer.Option("--to-amount", help="Amount to receive (raw units). Provide this OR --from-amount.")] = None,
-    from_layer: Annotated[str, typer.Option("--from-layer", help="Source layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")] = "BTC_LN",
-    to_layer: Annotated[str, typer.Option("--to-layer", help="Destination layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")] = "RGB_LN",
+    pair: Annotated[
+        str | None, typer.Argument(help="Trading pair in BASE/QUOTE format, e.g. BTC/USDT.")
+    ] = None,
+    from_amount: Annotated[
+        int | None,
+        typer.Option(
+            "--from-amount", help="Amount to send (raw units). Provide this OR --to-amount."
+        ),
+    ] = None,
+    to_amount: Annotated[
+        int | None,
+        typer.Option(
+            "--to-amount", help="Amount to receive (raw units). Provide this OR --from-amount."
+        ),
+    ] = None,
+    from_layer: Annotated[
+        str, typer.Option("--from-layer", help="Source layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")
+    ] = "BTC_LN",
+    to_layer: Annotated[
+        str, typer.Option("--to-layer", help="Destination layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")
+    ] = "RGB_LN",
 ) -> None:
     """Initialize an atomic swap against the maker server using a live quote."""
     resolved_pair = _resolve_pair(pair)
     resolved_from_amount, resolved_to_amount = _resolve_amount_pair(
         from_amount, to_amount, prompt_prefix="Atomic swap", default_choice="R"
     )
-    asyncio.run(_atomic_init(resolved_pair, resolved_from_amount, resolved_to_amount, from_layer, to_layer))
+    asyncio.run(
+        _atomic_init(resolved_pair, resolved_from_amount, resolved_to_amount, from_layer, to_layer)
+    )
 
 
 async def _atomic_init(
@@ -403,13 +478,17 @@ async def _atomic_init(
             print_success(f"Atomic swap initialized: {resp.payment_hash}")
             output_model(resp, title="Atomic Swap Init")
             print_info("Next step: choose one of these two flows.")
-            print_info("Flow 1 (manual): whitelist first on your local taker node, then execute against the maker server.")
+            print_info(
+                "Flow 1 (manual): whitelist first on your local taker node, then execute against the maker server."
+            )
             print_info(f"  kaleido swap node whitelist --swapstring '{resp.swapstring}'")
             print_info(
                 f"  kaleido swap atomic execute --swapstring '{resp.swapstring}' "
                 f"--taker-pubkey <pubkey> --payment-hash {resp.payment_hash}"
             )
-            print_info("Flow 2 (automatic): let atomic execute whitelist on your local node first, then execute against the maker server.")
+            print_info(
+                "Flow 2 (automatic): let atomic execute whitelist on your local node first, then execute against the maker server."
+            )
             print_info(
                 f"  kaleido swap atomic execute --auto-whitelist --swapstring '{resp.swapstring}' "
                 f"--taker-pubkey <pubkey> --payment-hash {resp.payment_hash}"
@@ -433,10 +512,22 @@ async def _atomic_init(
     ),
 )
 def atomic_execute(
-    swapstring: Annotated[str | None, typer.Option("--swapstring", help="Swap string returned by atomic init.")] = None,
-    taker_pubkey: Annotated[str | None, typer.Option("--taker-pubkey", help="Taker node pubkey.")] = None,
-    payment_hash: Annotated[str | None, typer.Option("--payment-hash", help="Payment hash returned by atomic init.")] = None,
-    auto_whitelist: Annotated[bool, typer.Option("--auto-whitelist", help="Whitelist the swap on the local taker node before executing it.")] = False,
+    swapstring: Annotated[
+        str | None, typer.Option("--swapstring", help="Swap string returned by atomic init.")
+    ] = None,
+    taker_pubkey: Annotated[
+        str | None, typer.Option("--taker-pubkey", help="Taker node pubkey.")
+    ] = None,
+    payment_hash: Annotated[
+        str | None, typer.Option("--payment-hash", help="Payment hash returned by atomic init.")
+    ] = None,
+    auto_whitelist: Annotated[
+        bool,
+        typer.Option(
+            "--auto-whitelist",
+            help="Whitelist the swap on the local taker node before executing it.",
+        ),
+    ] = False,
 ) -> None:
     """Execute an atomic swap against the maker server."""
     resolved_swapstring = _resolve_required_text(swapstring, "Swap string", "--swapstring")
@@ -447,7 +538,11 @@ def atomic_execute(
             "Auto-whitelist on the local taker node before executing?",
             default=False,
         )
-    asyncio.run(_atomic_execute(resolved_swapstring, resolved_taker_pubkey, resolved_payment_hash, auto_whitelist))
+    asyncio.run(
+        _atomic_execute(
+            resolved_swapstring, resolved_taker_pubkey, resolved_payment_hash, auto_whitelist
+        )
+    )
 
 
 async def _atomic_execute(
@@ -518,13 +613,36 @@ async def _atomic_status(payment_hash: str) -> None:
     ),
 )
 def atomic_run(
-    pair: Annotated[str | None, typer.Argument(help="Trading pair in BASE/QUOTE format, e.g. BTC/USDT.")] = None,
-    from_amount: Annotated[int | None, typer.Option("--from-amount", help="Amount to send (raw units). Provide this OR --to-amount.")] = None,
-    to_amount: Annotated[int | None, typer.Option("--to-amount", help="Amount to receive (raw units). Provide this OR --from-amount.")] = None,
-    from_layer: Annotated[str, typer.Option("--from-layer", help="Source layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")] = "BTC_LN",
-    to_layer: Annotated[str, typer.Option("--to-layer", help="Destination layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")] = "RGB_LN",
-    taker_pubkey: Annotated[str | None, typer.Option("--taker-pubkey", help="Taker node pubkey. Defaults to the local node taker pubkey.")] = None,
-    yes: Annotated[bool, typer.Option("--yes", "-y", help="Skip the confirmation prompt in interactive mode.")] = False,
+    pair: Annotated[
+        str | None, typer.Argument(help="Trading pair in BASE/QUOTE format, e.g. BTC/USDT.")
+    ] = None,
+    from_amount: Annotated[
+        int | None,
+        typer.Option(
+            "--from-amount", help="Amount to send (raw units). Provide this OR --to-amount."
+        ),
+    ] = None,
+    to_amount: Annotated[
+        int | None,
+        typer.Option(
+            "--to-amount", help="Amount to receive (raw units). Provide this OR --from-amount."
+        ),
+    ] = None,
+    from_layer: Annotated[
+        str, typer.Option("--from-layer", help="Source layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")
+    ] = "BTC_LN",
+    to_layer: Annotated[
+        str, typer.Option("--to-layer", help="Destination layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")
+    ] = "RGB_LN",
+    taker_pubkey: Annotated[
+        str | None,
+        typer.Option(
+            "--taker-pubkey", help="Taker node pubkey. Defaults to the local node taker pubkey."
+        ),
+    ] = None,
+    yes: Annotated[
+        bool, typer.Option("--yes", "-y", help="Skip the confirmation prompt in interactive mode.")
+    ] = False,
 ) -> None:
     """Run an atomic swap end-to-end using the local node as taker."""
     resolved_pair = _resolve_pair(pair)
@@ -622,11 +740,23 @@ async def _atomic_run(
     ),
 )
 def node_init(
-    from_asset: Annotated[str | None, typer.Option("--from-asset", help="RGB asset ID the maker will send (None = BTC).")] = None,
-    qty_from: Annotated[int | None, typer.Option("--qty-from", help="Amount the maker will send (raw units).")] = None,
-    to_asset: Annotated[str | None, typer.Option("--to-asset", help="RGB asset ID the maker will receive (None = BTC).")] = None,
-    qty_to: Annotated[int | None, typer.Option("--qty-to", help="Amount the maker will receive (raw units).")] = None,
-    timeout_sec: Annotated[int, typer.Option("--timeout", help="Swap offer timeout in seconds.")] = 100,
+    from_asset: Annotated[
+        str | None,
+        typer.Option("--from-asset", help="RGB asset ID the maker will send (None = BTC)."),
+    ] = None,
+    qty_from: Annotated[
+        int | None, typer.Option("--qty-from", help="Amount the maker will send (raw units).")
+    ] = None,
+    to_asset: Annotated[
+        str | None,
+        typer.Option("--to-asset", help="RGB asset ID the maker will receive (None = BTC)."),
+    ] = None,
+    qty_to: Annotated[
+        int | None, typer.Option("--qty-to", help="Amount the maker will receive (raw units).")
+    ] = None,
+    timeout_sec: Annotated[
+        int, typer.Option("--timeout", help="Swap offer timeout in seconds.")
+    ] = 100,
 ) -> None:
     """Initialize a low-level local node swap via maker-init."""
     resolved_qty_from: int
@@ -688,7 +818,10 @@ async def _node_init(
     ),
 )
 def node_whitelist(
-    swapstring: Annotated[str | None, typer.Option("--swapstring", help="Swap string returned by node init or atomic init.")] = None,
+    swapstring: Annotated[
+        str | None,
+        typer.Option("--swapstring", help="Swap string returned by node init or atomic init."),
+    ] = None,
 ) -> None:
     """Whitelist a swap on the local taker node via /taker."""
     resolved_swapstring = _resolve_required_text(swapstring, "Swap string", "--swapstring")
@@ -718,13 +851,22 @@ async def _node_whitelist(swapstring: str) -> None:
     ),
 )
 def node_execute(
-    swapstring: Annotated[str | None, typer.Option("--swapstring", help="Swap string returned by node init.")] = None,
-    payment_secret: Annotated[str | None, typer.Option("--payment-secret", help="Payment secret returned by node init.")] = None,
-    taker_pubkey: Annotated[str | None, typer.Option("--taker-pubkey", help="Taker node pubkey. Defaults to own node pubkey.")] = None,
+    swapstring: Annotated[
+        str | None, typer.Option("--swapstring", help="Swap string returned by node init.")
+    ] = None,
+    payment_secret: Annotated[
+        str | None, typer.Option("--payment-secret", help="Payment secret returned by node init.")
+    ] = None,
+    taker_pubkey: Annotated[
+        str | None,
+        typer.Option("--taker-pubkey", help="Taker node pubkey. Defaults to own node pubkey."),
+    ] = None,
 ) -> None:
     """Execute a low-level local node swap via maker-execute."""
     resolved_swapstring = _resolve_required_text(swapstring, "Swap string", "--swapstring")
-    resolved_payment_secret = _resolve_required_text(payment_secret, "Payment secret", "--payment-secret")
+    resolved_payment_secret = _resolve_required_text(
+        payment_secret, "Payment secret", "--payment-secret"
+    )
     asyncio.run(_node_execute(resolved_swapstring, resolved_payment_secret, taker_pubkey))
 
 
@@ -744,7 +886,9 @@ async def _node_execute(
             )
         )
         if is_json_mode():
-            print_json({"ok": True, "swapstring": swapstring, "taker_pubkey": resolved_taker_pubkey})
+            print_json(
+                {"ok": True, "swapstring": swapstring, "taker_pubkey": resolved_taker_pubkey}
+            )
         else:
             print_success("Node swap executed successfully")
     except Exception as e:
@@ -768,7 +912,9 @@ def node_status(
     maker: Annotated[bool, typer.Option("--maker", help="Look up the maker-side swap.")] = False,
 ) -> None:
     """Check a local node swap by payment hash."""
-    resolved_payment_hash = _resolve_required_text(payment_hash, "Payment hash", "PAYMENT_HASH argument")
+    resolved_payment_hash = _resolve_required_text(
+        payment_hash, "Payment hash", "PAYMENT_HASH argument"
+    )
     if not taker and not maker:
         taker = True
     elif taker == maker:
@@ -796,9 +942,7 @@ async def _node_status(payment_hash: str, taker: bool) -> None:
 @node_app.command(
     "list",
     epilog=(
-        "[bold]Examples[/bold]\n\n"
-        "  List all node swaps:\n"
-        "  [cyan]kaleido swap node list[/cyan]"
+        "[bold]Examples[/bold]\n\n  List all node swaps:\n  [cyan]kaleido swap node list[/cyan]"
     ),
 )
 def node_list() -> None:

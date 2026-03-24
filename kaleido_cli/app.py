@@ -168,13 +168,21 @@ app.add_typer(
 app.add_typer(
     wallet_app, name="wallet", help="BTC wallet — balance, addresses, send, UTXOs, backup, restore."
 )
-app.add_typer(asset_app, name="asset", help="RGB assets — list, issue by schema, send, invoices, transfers.")
-app.add_typer(channel_app, name="channel", help="Lightning channels — list, open, close, and LSP order flow.")
+app.add_typer(
+    asset_app, name="asset", help="RGB assets — list, issue by schema, send, invoices, transfers."
+)
+app.add_typer(
+    channel_app, name="channel", help="Lightning channels — list, open, close, and LSP order flow."
+)
 app.add_typer(peer_app, name="peer", help="Peer connections — list, connect, disconnect.")
 app.add_typer(
     payment_app, name="payment", help="Lightning payments — pay, invoice, keysend, decode, status."
 )
-app.add_typer(market_app, name="market", help="Kaleidoswap market data — assets, pairs, routes, quotes, analytics.")
+app.add_typer(
+    market_app,
+    name="market",
+    help="Kaleidoswap market data — assets, pairs, routes, quotes, analytics.",
+)
 app.add_typer(
     swap_app,
     name="swap",

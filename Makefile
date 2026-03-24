@@ -1,4 +1,9 @@
-.PHONY: install uninstall reinstall lint format typecheck pre-commit
+.PHONY: \
+	install uninstall reinstall \
+	check check-format check-lint typecheck \
+	fix \
+	lint format \
+	pre-commit
 
 install:
 	uv tool install --editable .
@@ -8,6 +13,14 @@ uninstall:
 
 reinstall: uninstall install
 
+check-format:
+	uvx ruff format --check .
+
+check-lint:
+	uvx ruff check .
+
+check: check-format check-lint typecheck
+
 lint:
 	uvx ruff check --fix .
 
@@ -15,6 +28,8 @@ format:
 	uvx ruff format .
 
 typecheck:
-	uvx pyright .
+	uvx --with . pyright .
 
-pre-commit: lint typecheck format
+fix: format lint
+
+pre-commit: check
