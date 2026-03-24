@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import time
 from typing import Annotated
 
 import typer
@@ -390,6 +391,9 @@ async def _asset_invoice(
     duration_seconds: int | None,
     witness: bool,
 ) -> None:
+    expiration_timestamp = (
+        int(time.time()) + duration_seconds if duration_seconds is not None else None
+    )
     try:
         client = get_client(require_node=True)
         resp: RgbInvoiceResponse = await client.rln.create_rgb_invoice(
@@ -401,7 +405,7 @@ async def _asset_invoice(
                     else None
                 ),
                 min_confirmations=min_confirmations,
-                duration_seconds=duration_seconds,
+                expiration_timestamp=expiration_timestamp,
                 witness=witness,
             )
         )

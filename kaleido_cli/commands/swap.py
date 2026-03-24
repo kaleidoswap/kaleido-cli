@@ -27,6 +27,7 @@ from kaleido_sdk import (
     SwapStatusRequest,
     SwapStatusResponse,
     TradingPairsResponse,
+    parse_raw_amount,
 )
 from kaleido_sdk.rln import (
     GetSwapRequest,
@@ -49,6 +50,7 @@ from kaleido_cli.output import (
     print_json,
     print_success,
 )
+from kaleido_cli.utils.pairs import pair_assets, resolve_quote_layers, resolve_trading_pair
 
 swap_app = typer.Typer(
     no_args_is_help=True,
@@ -86,12 +88,16 @@ def _resolve_pair(pair: str | None) -> str:
 
 
 def _resolve_amount_pair(
-    from_amount: int | None,
-    to_amount: int | None,
+    from_amount: str | None,
+    to_amount: str | None,
     *,
     prompt_prefix: str,
     default_choice: str,
-) -> tuple[int | None, int | None]:
+    pair: str,
+) -> tuple[str | None, str | None]:
+    base_ticker, _, quote_ticker = pair.partition("/")
+    send_label = base_ticker or "base asset"
+    receive_label = quote_ticker or "quote asset"
     if from_amount is None and to_amount is None:
         if is_interactive():
             choice = typer.prompt(
@@ -99,14 +105,32 @@ def _resolve_amount_pair(
                 default=default_choice,
             )
             if choice.strip().upper().startswith("R"):
-                return None, typer.prompt("Amount to receive (raw units)", type=int)
-            return typer.prompt("Amount to send (raw units)", type=int), None
+                return None, typer.prompt(f"Amount to receive ({receive_label}, display units)")
+            return typer.prompt(f"Amount to send ({send_label}, display units)"), None
         print_error("Provide --from-amount or --to-amount in non-interactive mode.")
         raise typer.Exit(1)
     if from_amount is not None and to_amount is not None:
         print_error("Provide exactly one of --from-amount or --to-amount.")
         raise typer.Exit(1)
     return from_amount, to_amount
+
+
+def _display_amount_to_raw(
+    value: str,
+    *,
+    precision: int | None,
+    asset_label: str,
+    option_name: str,
+) -> int:
+    normalized = value.strip()
+    if not normalized:
+        print_error(f"{option_name} cannot be empty.")
+        raise typer.Exit(1)
+    try:
+        return parse_raw_amount(normalized, precision or 0)
+    except ValueError as exc:
+        print_error(f"{option_name} for {asset_label}: {exc}")
+        raise typer.Exit(1)
 
 
 def _resolve_required_text(value: str | None, prompt: str, option_name: str) -> str:
@@ -127,33 +151,76 @@ def _resolve_accept_reject(accept: bool, reject: bool, prompt: str) -> bool:
     return accept
 
 
+def _confirm_quote_or_exit(quote: PairQuoteResponse, *, title: str, yes: bool) -> None:
+    """Show a quote and require explicit acceptance before continuing."""
+    if is_json_mode():
+        if not yes:
+            print_error("--yes is required in non-interactive mode to accept the quoted price.")
+            raise typer.Exit(1)
+        return
+
+    output_model(quote, title=title)
+
+    if is_interactive():
+        if yes:
+            return
+        if not typer.confirm("Proceed with this quote?", default=True):
+            print_error("Swap cancelled before initialization.")
+            raise typer.Exit(0)
+        return
+
+    if not yes:
+        print_error("--yes is required in non-interactive mode to accept the quoted price.")
+        raise typer.Exit(1)
+
+
 async def _fetch_quote(
     pair: str,
-    from_amount: int | None,
-    to_amount: int | None,
+    from_amount: str | None,
+    to_amount: str | None,
     from_layer: str,
     to_layer: str,
 ) -> PairQuoteResponse:
     client = get_client()
     pairs: TradingPairsResponse = await client.maker.list_pairs()
-    matched = next(
-        (p for p in (pairs.pairs or []) if f"{p.base.ticker}/{p.quote.ticker}" == pair.upper()),
-        None,
-    )
-    if not matched:
+    resolved_pair = resolve_trading_pair(pairs.pairs, pair)
+    if not resolved_pair:
         print_error(f"Pair {pair!r} not found.")
         raise typer.Exit(1)
+    matched_pair, is_reversed = resolved_pair
+    from_asset, to_asset = pair_assets(matched_pair, is_reversed)
+
+    resolved_from_amount = (
+        _display_amount_to_raw(
+            from_amount,
+            precision=from_asset.precision,
+            asset_label=from_asset.ticker,
+            option_name="--from-amount",
+        )
+        if from_amount is not None
+        else None
+    )
+    resolved_to_amount = (
+        _display_amount_to_raw(
+            to_amount,
+            precision=to_asset.precision,
+            asset_label=to_asset.ticker,
+            option_name="--to-amount",
+        )
+        if to_amount is not None
+        else None
+    )
 
     body = PairQuoteRequest(
         from_asset=SwapLegInput(
-            asset_id=matched.base.ticker,
+            asset_id=from_asset.ticker,
             layer=Layer(from_layer),
-            amount=from_amount,
+            amount=resolved_from_amount,
         ),
         to_asset=SwapLegInput(
-            asset_id=matched.quote.ticker,
+            asset_id=to_asset.ticker,
             layer=Layer(to_layer),
-            amount=to_amount,
+            amount=resolved_to_amount,
         ),
     )
     return await client.maker.get_quote(body)
@@ -164,10 +231,10 @@ async def _fetch_quote(
     epilog=(
         "[bold]Examples[/bold]\n\n"
         "  Swap sats for 5 USDT over RGB Lightning:\n"
-        "  [cyan]kaleido swap order create BTC/USDT --to-amount 5000000 "
+        "  [cyan]kaleido swap order create BTC/USDT --to-amount 5 "
         "--receiver-address lnbcrt... --receiver-format BOLT11[/cyan]\n\n"
         "  Swap onchain BTC into an RGB invoice:\n"
-        "  [cyan]kaleido swap order create BTC/USDT --to-amount 5000000 "
+        "  [cyan]kaleido swap order create BTC/USDT --to-amount 5 "
         "--from-layer BTC_L1 --to-layer RGB_L1 --receiver-address rgb:... "
         "--receiver-format RGB_INVOICE[/cyan]"
     ),
@@ -177,23 +244,33 @@ def order_create(
         str | None, typer.Argument(help="Trading pair in BASE/QUOTE format, e.g. BTC/USDT.")
     ] = None,
     from_amount: Annotated[
-        int | None,
+        str | None,
         typer.Option(
-            "--from-amount", help="Amount to send (raw units). Provide this OR --to-amount."
+            "--from-amount",
+            help="Amount to send in display units. Provide this OR --to-amount.",
         ),
     ] = None,
     to_amount: Annotated[
-        int | None,
+        str | None,
         typer.Option(
-            "--to-amount", help="Amount to receive (raw units). Provide this OR --from-amount."
+            "--to-amount",
+            help="Amount to receive in display units. Provide this OR --from-amount.",
         ),
     ] = None,
     from_layer: Annotated[
-        str, typer.Option("--from-layer", help="Source layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")
-    ] = "BTC_LN",
+        str | None,
+        typer.Option(
+            "--from-layer",
+            help="Source layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN. Defaults from the requested pair direction.",
+        ),
+    ] = None,
     to_layer: Annotated[
-        str, typer.Option("--to-layer", help="Destination layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")
-    ] = "RGB_LN",
+        str | None,
+        typer.Option(
+            "--to-layer",
+            help="Destination layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN. Defaults from the requested pair direction.",
+        ),
+    ] = None,
     receiver_address: Annotated[
         str | None,
         typer.Option(
@@ -218,7 +295,10 @@ def order_create(
     """Create a maker swap order from a live quote."""
     resolved_pair = _resolve_pair(pair)
     resolved_from_amount, resolved_to_amount = _resolve_amount_pair(
-        from_amount, to_amount, prompt_prefix="Order", default_choice="R"
+        from_amount, to_amount, prompt_prefix="Order", default_choice="R", pair=resolved_pair
+    )
+    resolved_from_layer, resolved_to_layer = resolve_quote_layers(
+        resolved_pair, from_layer, to_layer
     )
     resolved_receiver_address = _resolve_required_text(
         receiver_address, "Receiver address / invoice", "--receiver-address"
@@ -233,8 +313,8 @@ def order_create(
             resolved_pair,
             resolved_from_amount,
             resolved_to_amount,
-            from_layer,
-            to_layer,
+            resolved_from_layer,
+            resolved_to_layer,
             resolved_receiver_address,
             resolved_receiver_format,
             min_onchain_conf,
@@ -246,8 +326,8 @@ def order_create(
 
 async def _order_create(
     pair: str,
-    from_amount: int | None,
-    to_amount: int | None,
+    from_amount: str | None,
+    to_amount: str | None,
     from_layer: str,
     to_layer: str,
     receiver_address: str,
@@ -412,7 +492,7 @@ async def _order_history(status: str | None, limit: int) -> None:
     epilog=(
         "[bold]Examples[/bold]\n\n"
         "  Initialize an atomic swap from a live quote:\n"
-        "  [cyan]kaleido swap atomic init BTC/USDT --to-amount 5000000[/cyan]\n\n"
+        "  [cyan]kaleido swap atomic init BTC/USDT --to-amount 5[/cyan]\n\n"
         "[dim]After init, you can whitelist explicitly, or let execute do it for you:[/dim]\n"
         "[cyan]kaleido swap node whitelist --swapstring '<swapstring>'[/cyan]\n"
         "[cyan]kaleido swap atomic execute --swapstring '<swapstring>' "
@@ -426,44 +506,78 @@ def atomic_init(
         str | None, typer.Argument(help="Trading pair in BASE/QUOTE format, e.g. BTC/USDT.")
     ] = None,
     from_amount: Annotated[
-        int | None,
+        str | None,
         typer.Option(
-            "--from-amount", help="Amount to send (raw units). Provide this OR --to-amount."
+            "--from-amount",
+            help="Amount to send in display units. Provide this OR --to-amount.",
         ),
     ] = None,
     to_amount: Annotated[
-        int | None,
+        str | None,
         typer.Option(
-            "--to-amount", help="Amount to receive (raw units). Provide this OR --from-amount."
+            "--to-amount",
+            help="Amount to receive in display units. Provide this OR --from-amount.",
         ),
     ] = None,
     from_layer: Annotated[
-        str, typer.Option("--from-layer", help="Source layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")
-    ] = "BTC_LN",
+        str | None,
+        typer.Option(
+            "--from-layer",
+            help="Source layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN. Defaults from the requested pair direction.",
+        ),
+    ] = None,
     to_layer: Annotated[
-        str, typer.Option("--to-layer", help="Destination layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")
-    ] = "RGB_LN",
+        str | None,
+        typer.Option(
+            "--to-layer",
+            help="Destination layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN. Defaults from the requested pair direction.",
+        ),
+    ] = None,
+    yes: Annotated[
+        bool,
+        typer.Option(
+            "--yes",
+            "-y",
+            help="Accept the displayed quote without prompting. Required in non-interactive mode.",
+        ),
+    ] = False,
 ) -> None:
     """Initialize an atomic swap against the maker server using a live quote."""
     resolved_pair = _resolve_pair(pair)
     resolved_from_amount, resolved_to_amount = _resolve_amount_pair(
-        from_amount, to_amount, prompt_prefix="Atomic swap", default_choice="R"
+        from_amount,
+        to_amount,
+        prompt_prefix="Atomic swap",
+        default_choice="R",
+        pair=resolved_pair,
+    )
+    resolved_from_layer, resolved_to_layer = resolve_quote_layers(
+        resolved_pair, from_layer, to_layer
     )
     asyncio.run(
-        _atomic_init(resolved_pair, resolved_from_amount, resolved_to_amount, from_layer, to_layer)
+        _atomic_init(
+            resolved_pair,
+            resolved_from_amount,
+            resolved_to_amount,
+            resolved_from_layer,
+            resolved_to_layer,
+            yes,
+        )
     )
 
 
 async def _atomic_init(
     pair: str,
-    from_amount: int | None,
-    to_amount: int | None,
+    from_amount: str | None,
+    to_amount: str | None,
     from_layer: str,
     to_layer: str,
+    yes: bool,
 ) -> None:
     try:
         client = get_client()
         quote = await _fetch_quote(pair, from_amount, to_amount, from_layer, to_layer)
+        _confirm_quote_or_exit(quote, title=f"Quote — {pair.upper()}", yes=yes)
         body = SwapRequest(
             rfq_id=quote.rfq_id,
             from_asset=quote.from_asset.asset_id,
@@ -605,9 +719,9 @@ async def _atomic_status(payment_hash: str) -> None:
     epilog=(
         "[bold]Examples[/bold]\n\n"
         "  Run an atomic swap in one command using your local taker node:\n"
-        "  [cyan]kaleido swap atomic run BTC/USDT --to-amount 5000000[/cyan]\n\n"
+        "  [cyan]kaleido swap atomic run BTC/USDT --to-amount 5[/cyan]\n\n"
         "  Non-interactive flow with an explicit taker pubkey:\n"
-        "  [cyan]kaleido swap atomic run BTC/USDT --from-amount 100000 --from-layer BTC_LN "
+        "  [cyan]kaleido swap atomic run BTC/USDT --from-amount 0.001 --from-layer BTC_LN "
         "--to-layer RGB_LN --taker-pubkey 03ab... --yes[/cyan]\n\n"
         "[dim]This wrapper automates atomic init, local taker whitelist, and atomic execute.[/dim]"
     ),
@@ -617,23 +731,33 @@ def atomic_run(
         str | None, typer.Argument(help="Trading pair in BASE/QUOTE format, e.g. BTC/USDT.")
     ] = None,
     from_amount: Annotated[
-        int | None,
+        str | None,
         typer.Option(
-            "--from-amount", help="Amount to send (raw units). Provide this OR --to-amount."
+            "--from-amount",
+            help="Amount to send in display units. Provide this OR --to-amount.",
         ),
     ] = None,
     to_amount: Annotated[
-        int | None,
+        str | None,
         typer.Option(
-            "--to-amount", help="Amount to receive (raw units). Provide this OR --from-amount."
+            "--to-amount",
+            help="Amount to receive in display units. Provide this OR --from-amount.",
         ),
     ] = None,
     from_layer: Annotated[
-        str, typer.Option("--from-layer", help="Source layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")
-    ] = "BTC_LN",
+        str | None,
+        typer.Option(
+            "--from-layer",
+            help="Source layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN. Defaults from the requested pair direction.",
+        ),
+    ] = None,
     to_layer: Annotated[
-        str, typer.Option("--to-layer", help="Destination layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN.")
-    ] = "RGB_LN",
+        str | None,
+        typer.Option(
+            "--to-layer",
+            help="Destination layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN. Defaults from the requested pair direction.",
+        ),
+    ] = None,
     taker_pubkey: Annotated[
         str | None,
         typer.Option(
@@ -641,21 +765,33 @@ def atomic_run(
         ),
     ] = None,
     yes: Annotated[
-        bool, typer.Option("--yes", "-y", help="Skip the confirmation prompt in interactive mode.")
+        bool,
+        typer.Option(
+            "--yes",
+            "-y",
+            help="Accept the displayed quote and skip later confirmations. Required in non-interactive mode.",
+        ),
     ] = False,
 ) -> None:
     """Run an atomic swap end-to-end using the local node as taker."""
     resolved_pair = _resolve_pair(pair)
     resolved_from_amount, resolved_to_amount = _resolve_amount_pair(
-        from_amount, to_amount, prompt_prefix="Atomic swap", default_choice="R"
+        from_amount,
+        to_amount,
+        prompt_prefix="Atomic swap",
+        default_choice="R",
+        pair=resolved_pair,
+    )
+    resolved_from_layer, resolved_to_layer = resolve_quote_layers(
+        resolved_pair, from_layer, to_layer
     )
     asyncio.run(
         _atomic_run(
             resolved_pair,
             resolved_from_amount,
             resolved_to_amount,
-            from_layer,
-            to_layer,
+            resolved_from_layer,
+            resolved_to_layer,
             taker_pubkey,
             yes,
         )
@@ -664,8 +800,8 @@ def atomic_run(
 
 async def _atomic_run(
     pair: str,
-    from_amount: int | None,
-    to_amount: int | None,
+    from_amount: str | None,
+    to_amount: str | None,
     from_layer: str,
     to_layer: str,
     taker_pubkey_override: str | None,
@@ -674,6 +810,7 @@ async def _atomic_run(
     try:
         client = get_client(require_node=True)
         quote = await _fetch_quote(pair, from_amount, to_amount, from_layer, to_layer)
+        _confirm_quote_or_exit(quote, title=f"Quote — {pair.upper()}", yes=yes)
         init_resp: SwapResponse = await client.maker.init_swap(
             SwapRequest(
                 rfq_id=quote.rfq_id,

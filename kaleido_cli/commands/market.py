@@ -16,6 +16,12 @@ from kaleido_cli.output import (
     print_error,
     print_json,
 )
+from kaleido_cli.utils.pairs import (
+    canonical_pair,
+    pair_assets,
+    resolve_quote_layers,
+    resolve_trading_pair,
+)
 
 market_app = typer.Typer(
     no_args_is_help=True,
@@ -120,19 +126,19 @@ def market_quote(
         ),
     ] = None,
     from_layer: Annotated[
-        str,
+        str | None,
         typer.Option(
             "--from-layer",
-            help="Source layer: [green]BTC_LN[/green], [green]RGB_LN[/green], [green]BTC_ONCHAIN[/green].",
+            help="Source layer: [green]BTC_LN[/green], [green]RGB_LN[/green], [green]BTC_ONCHAIN[/green]. Defaults from the requested pair direction.",
         ),
-    ] = "BTC_LN",
+    ] = None,
     to_layer: Annotated[
-        str,
+        str | None,
         typer.Option(
             "--to-layer",
-            help="Destination layer: [green]BTC_LN[/green], [green]RGB_LN[/green], [green]BTC_ONCHAIN[/green].",
+            help="Destination layer: [green]BTC_LN[/green], [green]RGB_LN[/green], [green]BTC_ONCHAIN[/green]. Defaults from the requested pair direction.",
         ),
-    ] = "RGB_LN",
+    ] = None,
 ) -> None:
     """Get a swap quote for a trading pair."""
     resolved_pair: str
@@ -158,7 +164,18 @@ def market_quote(
         print_error("Provide exactly one of --from-amount or --to-amount.")
         raise typer.Exit(1)
 
-    asyncio.run(_market_quote(resolved_pair, from_amount, to_amount, from_layer, to_layer))
+    resolved_from_layer, resolved_to_layer = resolve_quote_layers(
+        resolved_pair, from_layer, to_layer
+    )
+    asyncio.run(
+        _market_quote(
+            resolved_pair,
+            from_amount,
+            to_amount,
+            resolved_from_layer,
+            resolved_to_layer,
+        )
+    )
 
 
 async def _market_quote(
@@ -173,24 +190,23 @@ async def _market_quote(
     try:
         client = get_client()
         pairs = await client.maker.list_pairs()
-        matched = next(
-            (p for p in (pairs.pairs or []) if f"{p.base.ticker}/{p.quote.ticker}" == pair.upper()),
-            None,
-        )
-        if not matched:
+        resolved_pair = resolve_trading_pair(pairs.pairs, pair)
+        if not resolved_pair:
             print_error(
                 f"Pair {pair!r} not found. Use 'kaleido market pairs' to list available pairs."
             )
             raise typer.Exit(1)
+        matched_pair, is_reversed = resolved_pair
+        from_asset, to_asset = pair_assets(matched_pair, is_reversed)
 
         body = PairQuoteRequest(
             from_asset=SwapLegInput(
-                asset_id=matched.base.ticker,
+                asset_id=from_asset.ticker,
                 layer=Layer(from_layer),
                 amount=from_amount,
             ),
             to_asset=SwapLegInput(
-                asset_id=matched.quote.ticker,
+                asset_id=to_asset.ticker,
                 layer=Layer(to_layer),
                 amount=to_amount,
             ),
@@ -260,7 +276,14 @@ def market_routes(
 async def _market_routes(pair: str) -> None:
     try:
         client = get_client()
-        routes = await client.maker.get_pair_routes(pair.upper())
+        resolved_pair = resolve_trading_pair((await client.maker.list_pairs()).pairs, pair)
+        if not resolved_pair:
+            print_error(
+                f"Pair {pair!r} not found. Use 'kaleido market pairs' to list available pairs."
+            )
+            raise typer.Exit(1)
+        matched_pair, _ = resolved_pair
+        routes = await client.maker.get_pair_routes(canonical_pair(matched_pair))
         if is_json_mode():
             print_json([r.model_dump() for r in routes])
             return
