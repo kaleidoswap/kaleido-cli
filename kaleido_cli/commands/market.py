@@ -19,6 +19,7 @@ from kaleido_cli.output import (
 from kaleido_cli.utils.pairs import (
     canonical_pair,
     pair_assets,
+    resolve_asset_id_for_layer,
     resolve_quote_layers,
     resolve_trading_pair,
 )
@@ -198,15 +199,21 @@ async def _market_quote(
             raise typer.Exit(1)
         matched_pair, is_reversed = resolved_pair
         from_asset, to_asset = pair_assets(matched_pair, is_reversed)
+        try:
+            from_asset_id = resolve_asset_id_for_layer(from_asset, from_layer)
+            to_asset_id = resolve_asset_id_for_layer(to_asset, to_layer)
+        except ValueError as exc:
+            print_error(str(exc))
+            raise typer.Exit(1)
 
         body = PairQuoteRequest(
             from_asset=SwapLegInput(
-                asset_id=from_asset.ticker,
+                asset_id=from_asset_id,
                 layer=Layer(from_layer),
                 amount=from_amount,
             ),
             to_asset=SwapLegInput(
-                asset_id=to_asset.ticker,
+                asset_id=to_asset_id,
                 layer=Layer(to_layer),
                 amount=to_amount,
             ),
