@@ -30,9 +30,11 @@ def _normalize_asset_identifier(value: str) -> str:
 
 def decode_swapstring(swapstring: str) -> DecodedSwapString:
     """Parse a swapstring into its component fields."""
-    parts = swapstring.strip().split("/")
+    parts = [part.strip() for part in swapstring.split("/")]
     if len(parts) != 6:
         raise ValueError("Swapstring must contain 6 slash-separated fields.")
+    if any(part == "" for part in parts):
+        raise ValueError("Swapstring fields must not be empty or whitespace.")
 
     from_amount, from_asset, to_amount, to_asset, expiry, payment_hash = parts
     try:
