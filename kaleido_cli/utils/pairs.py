@@ -28,7 +28,11 @@ def resolve_asset_id_for_layer(asset: TradableAsset, layer: str) -> str:
     """Resolve the exact asset identifier to use for the selected layer."""
     normalized_layer = layer.strip().upper()
     if normalized_layer.startswith("BTC"):
-        return asset.ticker
+        if asset.ticker.strip().upper() == "BTC":
+            return asset.ticker
+        raise ValueError(
+            f"BTC* layers are only valid for BTC assets (got asset {asset.ticker!r} and layer {layer!r})."
+        )
 
     if normalized_layer.startswith("RGB"):
         protocol_ids = asset.protocol_ids or {}
