@@ -50,7 +50,17 @@ from kaleido_cli.output import (
     print_json,
     print_success,
 )
-from kaleido_cli.utils.pairs import pair_assets, resolve_quote_layers, resolve_trading_pair
+from kaleido_cli.utils.pairs import (
+    pair_assets,
+    resolve_asset_id_for_layer,
+    resolve_quote_layers,
+    resolve_trading_pair,
+)
+from kaleido_cli.utils.swaps import (
+    decode_swapstring,
+    validate_swapstring_against_quote,
+    validate_swapstring_against_swap,
+)
 
 swap_app = typer.Typer(
     no_args_is_help=True,
@@ -189,6 +199,12 @@ async def _fetch_quote(
         raise typer.Exit(1)
     matched_pair, is_reversed = resolved_pair
     from_asset, to_asset = pair_assets(matched_pair, is_reversed)
+    try:
+        from_asset_id = resolve_asset_id_for_layer(from_asset, from_layer)
+        to_asset_id = resolve_asset_id_for_layer(to_asset, to_layer)
+    except ValueError as exc:
+        print_error(str(exc))
+        raise typer.Exit(1)
 
     resolved_from_amount = (
         _display_amount_to_raw(
@@ -213,12 +229,12 @@ async def _fetch_quote(
 
     body = PairQuoteRequest(
         from_asset=SwapLegInput(
-            asset_id=from_asset.ticker,
+            asset_id=from_asset_id,
             layer=Layer(from_layer),
             amount=resolved_from_amount,
         ),
         to_asset=SwapLegInput(
-            asset_id=to_asset.ticker,
+            asset_id=to_asset_id,
             layer=Layer(to_layer),
             amount=resolved_to_amount,
         ),
@@ -668,6 +684,24 @@ async def _atomic_execute(
     try:
         client = get_client(require_node=auto_whitelist)
         if auto_whitelist:
+            decoded = decode_swapstring(swapstring)
+            status = await client.maker.get_atomic_swap_status(
+                SwapStatusRequest(payment_hash=payment_hash)
+            )
+            if status.swap is None:
+                print_error(
+                    "Maker returned no swap payload for --payment-hash; refusing to auto-whitelist."
+                )
+                raise typer.Exit(1)
+            try:
+                validate_swapstring_against_swap(
+                    decoded,
+                    status.swap,
+                    payment_hash=payment_hash,
+                )
+            except ValueError as exc:
+                print_error(f"Auto-whitelist validation failed: {exc}")
+                raise typer.Exit(1)
             await client.rln.whitelist_swap(TakerRequest(swapstring=swapstring))
         resp: ConfirmSwapResponse = await client.maker.execute_swap(
             ConfirmSwapRequest(
@@ -819,6 +853,12 @@ async def _atomic_run(
                 to_asset=quote.to_asset.asset_id,
                 to_amount=quote.to_asset.amount,
             )
+        )
+        decoded_swap = decode_swapstring(init_resp.swapstring)
+        validate_swapstring_against_quote(
+            decoded_swap,
+            quote,
+            payment_hash=init_resp.payment_hash,
         )
         resolved_taker_pubkey = taker_pubkey_override or await client.rln.get_taker_pubkey()
 

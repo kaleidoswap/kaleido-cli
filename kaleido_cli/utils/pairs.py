@@ -24,6 +24,28 @@ def pair_assets(pair: TradingPair, is_reversed: bool) -> tuple[TradableAsset, Tr
     return pair.base, pair.quote
 
 
+def resolve_asset_id_for_layer(asset: TradableAsset, layer: str) -> str:
+    """Resolve the exact asset identifier to use for the selected layer."""
+    normalized_layer = layer.strip().upper()
+    if normalized_layer.startswith("BTC"):
+        if asset.ticker.strip().upper() == "BTC":
+            return asset.ticker
+        raise ValueError(
+            f"BTC* layers are only valid for BTC assets (got asset {asset.ticker!r} and layer {layer!r})."
+        )
+
+    if normalized_layer.startswith("RGB"):
+        protocol_ids = asset.protocol_ids or {}
+        rgb_asset_id = protocol_ids.get("RGB")
+        if rgb_asset_id:
+            return rgb_asset_id
+        raise ValueError(
+            f"Asset {asset.ticker!r} does not expose an RGB asset id for layer {layer!r}."
+        )
+
+    raise ValueError(f"Unsupported layer {layer!r} for asset {asset.ticker!r}.")
+
+
 def resolve_trading_pair(
     pairs: Sequence[TradingPair] | None, pair: str
 ) -> tuple[TradingPair, bool] | None:
