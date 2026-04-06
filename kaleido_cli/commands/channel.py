@@ -36,6 +36,7 @@ from kaleido_cli.output import (
     print_panel,
     print_success,
 )
+from kaleido_cli.utils.prompts import resolve_required_text
 
 channel_app = typer.Typer(
     no_args_is_help=True,
@@ -691,14 +692,17 @@ async def _channel_order_create(params) -> None:
     ),
 )
 def channel_order_get(
-    order_id: Annotated[str, typer.Argument(help="LSP order ID.")],
+    order_id: Annotated[str | None, typer.Argument(help="LSP order ID.")] = None,
     access_token: Annotated[
-        str,
-        typer.Option("--access-token", help="Optional access token returned for the order."),
-    ] = "",
+        str | None,
+        typer.Option("--access-token", help="Access token returned for the order."),
+    ] = None,
 ) -> None:
     """Get the status and details of an LSP channel order."""
-    asyncio.run(_channel_order_get(order_id, access_token))
+    resolved_order_id = resolve_required_text(order_id, "LSP order ID", "ORDER_ID argument")
+    resolved_access_token = resolve_required_text(access_token, "Access token", "--access-token")
+
+    asyncio.run(_channel_order_get(resolved_order_id, resolved_access_token))
 
 
 async def _channel_order_get(order_id: str, access_token: str) -> None:

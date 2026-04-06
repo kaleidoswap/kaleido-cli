@@ -23,6 +23,11 @@ from kaleido_cli.utils.pairs import (
     resolve_quote_layers,
     resolve_trading_pair,
 )
+from kaleido_cli.utils.prompts import (
+    display_amount_to_raw,
+    resolve_amount_pair,
+    resolve_pair,
+)
 
 market_app = typer.Typer(
     no_args_is_help=True,
@@ -95,10 +100,10 @@ async def _market_pairs() -> None:
     "quote",
     epilog=(
         "[bold]Examples[/bold]\n\n"
-        "  Quote: send 100 000 msat via Lightning, receive USDT via RGB Lightning:\n"
-        "  [cyan]kaleido market quote BTC/USDT --from-amount 100000[/cyan]\n\n"
+        "  Quote: send BTC via Lightning, receive USDT via RGB Lightning:\n"
+        "  [cyan]kaleido market quote BTC/USDT --from-amount 0.001[/cyan]\n\n"
         "  Quote with explicit layers:\n"
-        "  [cyan]kaleido market quote BTC/USDT --from-amount 100000 --from-layer BTC_LN --to-layer RGB_LN[/cyan]\n\n"
+        "  [cyan]kaleido market quote BTC/USDT --from-amount 0.001 --from-layer BTC_LN --to-layer RGB_LN[/cyan]\n\n"
         "  Quote how much BTC is needed to receive 500 USDT:\n"
         "  [cyan]kaleido market quote BTC/USDT --to-amount 500 --from-layer BTC_LN --to-layer RGB_LN[/cyan]\n\n"
         "[bold]Available layers[/bold]: [green]BTC_LN[/green]  [green]RGB_LN[/green]  [green]BTC_ONCHAIN[/green]\n"
@@ -113,17 +118,17 @@ def market_quote(
         ),
     ] = None,
     from_amount: Annotated[
-        int | None,
+        str | None,
         typer.Option(
             "--from-amount",
-            help="Amount to send (raw units of the base asset). Provide this OR --to-amount.",
+            help="Amount to send in display units. Provide this OR --to-amount.",
         ),
     ] = None,
     to_amount: Annotated[
-        int | None,
+        str | None,
         typer.Option(
             "--to-amount",
-            help="Amount to receive (raw units of the quote asset). Provide this OR --from-amount.",
+            help="Amount to receive in display units. Provide this OR --from-amount.",
         ),
     ] = None,
     from_layer: Annotated[
@@ -142,28 +147,14 @@ def market_quote(
     ] = None,
 ) -> None:
     """Get a swap quote for a trading pair."""
-    resolved_pair: str
-    if pair is not None:
-        resolved_pair = pair
-    elif is_interactive():
-        resolved_pair = typer.prompt("Trading pair (e.g. BTC/USDT)")
-    else:
-        print_error("PAIR argument is required in non-interactive mode.")
-        raise typer.Exit(1)
-
-    if from_amount is None and to_amount is None:
-        if is_interactive():
-            choice = typer.prompt("Quote by [S]end amount or [R]eceive amount?", default="S")
-            if choice.strip().upper().startswith("R"):
-                to_amount = typer.prompt("Amount to receive (raw units)", type=int)
-            else:
-                from_amount = typer.prompt("Amount to send (raw units)", type=int)
-        else:
-            print_error("Provide --from-amount or --to-amount in non-interactive mode.")
-            raise typer.Exit(1)
-    elif from_amount is not None and to_amount is not None:
-        print_error("Provide exactly one of --from-amount or --to-amount.")
-        raise typer.Exit(1)
+    resolved_pair = resolve_pair(pair)
+    resolved_from_amount, resolved_to_amount = resolve_amount_pair(
+        from_amount,
+        to_amount,
+        prompt_prefix="Quote",
+        default_choice="R",
+        pair=resolved_pair,
+    )
 
     resolved_from_layer, resolved_to_layer = resolve_quote_layers(
         resolved_pair, from_layer, to_layer
@@ -171,8 +162,8 @@ def market_quote(
     asyncio.run(
         _market_quote(
             resolved_pair,
-            from_amount,
-            to_amount,
+            resolved_from_amount,
+            resolved_to_amount,
             resolved_from_layer,
             resolved_to_layer,
         )
@@ -181,8 +172,8 @@ def market_quote(
 
 async def _market_quote(
     pair: str,
-    from_amount: int | None,
-    to_amount: int | None,
+    from_amount: str | None,
+    to_amount: str | None,
     from_layer: str,
     to_layer: str,
 ) -> None:
@@ -205,17 +196,37 @@ async def _market_quote(
         except ValueError as exc:
             print_error(str(exc))
             raise typer.Exit(1)
+        resolved_from_amount = (
+            display_amount_to_raw(
+                from_amount,
+                precision=from_asset.precision,
+                asset_label=from_asset.ticker,
+                option_name="--from-amount",
+            )
+            if from_amount is not None
+            else None
+        )
+        resolved_to_amount = (
+            display_amount_to_raw(
+                to_amount,
+                precision=to_asset.precision,
+                asset_label=to_asset.ticker,
+                option_name="--to-amount",
+            )
+            if to_amount is not None
+            else None
+        )
 
         body = PairQuoteRequest(
             from_asset=SwapLegInput(
                 asset_id=from_asset_id,
                 layer=Layer(from_layer),
-                amount=from_amount,
+                amount=resolved_from_amount,
             ),
             to_asset=SwapLegInput(
                 asset_id=to_asset_id,
                 layer=Layer(to_layer),
-                amount=to_amount,
+                amount=resolved_to_amount,
             ),
         )
         quote = await client.maker.get_quote(body)
