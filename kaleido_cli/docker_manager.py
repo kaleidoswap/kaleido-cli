@@ -19,7 +19,7 @@ RLN_IMAGE = "kaleidoswap/rgb-lightning-node:latest"
 DEFAULT_BASE_DAEMON_PORT = 3001
 DEFAULT_BASE_PEER_PORT = 9735
 DEFAULT_NETWORK_NAME = "kaleidoswap-network"
-DEFAULT_SPAWN_DIR = Path.home() / ".kaleido" / "spawn"
+DEFAULT_SPAWN_DIR = Path.home() / ".kaleido"
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +71,7 @@ class SpawnConfig:
 
     # Environment identity
     name: str = "default"
-    spawn_base_dir: str = ""  # "" → ~/.kaleido/spawn  (env lives at base/name)
+    spawn_base_dir: str = ""  # "" → ~/.kaleido  (env lives at base/name)
 
     count: int = 1
     network: str = DEFAULT_NETWORK

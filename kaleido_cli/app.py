@@ -173,9 +173,7 @@ from .commands.peer import peer_app  # noqa: E402
 from .commands.swap import swap_app  # noqa: E402
 from .commands.wallet import wallet_app  # noqa: E402
 
-app.add_typer(
-    node_app, name="node", help="Manage the RLN node via Docker (start, stop, spawn, init…)."
-)
+app.add_typer(node_app, name="node", help="Manage the RLN node via Docker (start, stop, init…).")
 app.add_typer(
     wallet_app, name="wallet", help="BTC wallet — balance, addresses, send, UTXOs, backup, restore."
 )

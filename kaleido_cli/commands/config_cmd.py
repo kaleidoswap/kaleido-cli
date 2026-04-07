@@ -34,7 +34,7 @@ config_app = typer.Typer(
         "  [green]node-url[/green]   URL of your RGB Lightning Node  (default: http://localhost:3001)\n"
         f"  [green]api-url[/green]    Kaleidoswap maker API URL       (default: {DEFAULT_API_URL})\n"
         f"  [green]network[/green]    Bitcoin network                 (default: {DEFAULT_NETWORK})\n"
-        "  [green]spawn-dir[/green]  Directory for spawned nodes     (default: ~/.kaleido/spawn)\n"
+        "  [green]spawn-dir[/green]  Directory for node environments (default: ~/.kaleido)\n"
     ),
 )
 
@@ -52,7 +52,7 @@ def config_show() -> None:
             "api_url": config.api_url,
             "node_url": config.node_url,
             "network": config.network,
-            "spawn_dir": config.spawn_dir or "(default: ~/.kaleido/spawn)",
+            "spawn_dir": config.spawn_dir or "(default: ~/.kaleido)",
         },
         title=f"Config ({CONFIG_FILE})",
     )

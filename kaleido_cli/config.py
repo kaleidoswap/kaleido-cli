@@ -37,8 +37,8 @@ class CliConfig:
     api_url: str = DEFAULT_API_URL
     node_url: str = DEFAULT_NODE_URL
     network: str = DEFAULT_NETWORK
-    # Directory used by `kaleido node spawn` to write generated compose files + volumes
-    spawn_dir: str = ""  # default: ~/.kaleido/spawn
+    # Directory used to write generated compose files + volumes.
+    spawn_dir: str = ""  # default: ~/.kaleido
 
     def to_dict(self) -> dict:
         return asdict(self)
