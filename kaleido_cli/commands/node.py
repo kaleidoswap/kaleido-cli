@@ -9,6 +9,16 @@ from typing import Annotated
 import typer
 from kaleido_sdk.rln import TakerRequest
 
+from kaleido_cli.config import (
+    DEFAULT_API_URL,
+    DEFAULT_BITCOIND_RPC_HOST,
+    DEFAULT_BITCOIND_RPC_PASSWORD,
+    DEFAULT_BITCOIND_RPC_PORT,
+    DEFAULT_BITCOIND_RPC_USERNAME,
+    DEFAULT_INDEXER_URL,
+    DEFAULT_NETWORK,
+    DEFAULT_PROXY_ENDPOINT,
+)
 from kaleido_cli.context import get_client, state
 from kaleido_cli.docker_manager import (
     DEFAULT_BASE_DAEMON_PORT,
@@ -19,6 +29,7 @@ from kaleido_cli.docker_manager import (
     SpawnManager,
     list_spawn_names,
 )
+from kaleido_cli.onboarding import SetupMode, run_setup
 from kaleido_cli.output import (
     is_interactive,
     is_json_mode,
@@ -36,6 +47,7 @@ node_app = typer.Typer(
     help=(
         "Manage named RGB Lightning Node environments via Docker.\n\n"
         "[bold]Creating an environment:[/bold]\n"
+        "  [cyan]kaleido node setup[/cyan]           — create one mutinynet node with defaults\n"
         "  [cyan]kaleido node create[/cyan]          — wizard: configure ports, network\n\n"
         "[bold]Managing environments:[/bold]\n"
         "  [cyan]kaleido node list[/cyan]             — list all environments with their node URLs\n"
@@ -63,13 +75,6 @@ taker_app = typer.Typer(
 )
 
 node_app.add_typer(taker_app, name="taker")
-
-DEFAULT_BITCOIND_USER = "user"
-DEFAULT_BITCOIND_PASS = "password"
-DEFAULT_BITCOIND_HOST = "regtest-bitcoind.rgbtools.org"
-DEFAULT_BITCOIND_PORT = 80
-DEFAULT_INDEXER_URL = "electrum.rgbtools.org:50041"
-DEFAULT_PROXY_ENDPOINT = "rpcs://proxy.iriswallet.com/0.2/json-rpc"
 
 
 # ---------------------------------------------------------------------------
@@ -176,6 +181,62 @@ async def _taker_whitelist(swapstring: str) -> None:
 
 
 @node_app.command(
+    "setup",
+    epilog=(
+        "[bold]Examples[/bold]\n\n"
+        "  Create and start one mutinynet node with defaults:\n"
+        "  [cyan]kaleido node setup[/cyan]\n"
+        "  [cyan]kaleido node setup --mutinynet[/cyan]\n\n"
+        "  Use a custom environment name:\n"
+        "  [cyan]kaleido node setup --env-name taker-1[/cyan]"
+    ),
+)
+def node_setup(
+    mutinynet: Annotated[
+        bool,
+        typer.Option(
+            "--mutinynet",
+            help="Use Kaleidoswap custom signet/mutinynet defaults. This is also the default.",
+        ),
+    ] = False,
+    network: Annotated[
+        str | None,
+        typer.Option("--network", help="Bitcoin network to pass to RLN (default: mutinynet)."),
+    ] = None,
+    spawn_dir: Annotated[
+        str | None,
+        typer.Option("--spawn-dir", help="Base directory for local node environments."),
+    ] = None,
+    env_name: Annotated[
+        str | None,
+        typer.Option("--env-name", help="Environment name when creating the local node."),
+    ] = None,
+    node_count: Annotated[
+        int | None,
+        typer.Option("--node-count", min=1, help="Number of nodes to create."),
+    ] = None,
+    start: Annotated[
+        bool,
+        typer.Option("--start/--no-start", help="Start the node environment after creating it."),
+    ] = True,
+) -> None:
+    """Create a local RLN environment using Kaleidoswap mutinynet defaults."""
+    resolved_network = DEFAULT_NETWORK if mutinynet or network is None else network
+    run_setup(
+        mode=SetupMode.local,
+        defaults=True,
+        api_url=DEFAULT_API_URL,
+        network=resolved_network,
+        node_url=None,
+        create_node=True,
+        spawn_dir=spawn_dir,
+        env_name=env_name,
+        node_count=node_count,
+        start=start,
+    )
+
+
+@node_app.command(
     "create",
     epilog=(
         "[bold]Examples[/bold]\n\n"
@@ -236,7 +297,7 @@ def node_create(
     count = typer.prompt("  How many RGB Lightning Nodes?", default=1, type=int)
 
     # ── Network ──────────────────────────────────────────────────────────────
-    network = typer.prompt("  Bitcoin network", default=state.config.network or "regtest")
+    network = typer.prompt("  Bitcoin network", default=state.config.network or DEFAULT_NETWORK)
 
     # ── Node ports ───────────────────────────────────────────────────────────
     print_info("  ── Node ports ────────────────────────────────────────")
@@ -607,7 +668,7 @@ async def _node_init(password: str, mnemonic: str | None) -> None:
     "unlock",
     epilog=(
         "[bold]Examples[/bold]\n\n"
-        "  Simple unlock (uses rgbtools.org defaults):\n"
+        "  Simple unlock (uses Kaleidoswap mutinynet defaults):\n"
         "  [cyan]kaleido node unlock[/cyan]\n\n"
         "  Override bitcoind credentials:\n"
         "  [cyan]kaleido node unlock --bitcoind-user alice --bitcoind-pass hunter2[/cyan]\n\n"
@@ -638,19 +699,19 @@ def node_unlock(
             help="bitcoind RPC password.",
             hide_input=True,
         ),
-    ] = DEFAULT_BITCOIND_PASS,
+    ] = DEFAULT_BITCOIND_RPC_PASSWORD,
     bitcoind_user: Annotated[
         str,
         typer.Option("--bitcoind-user", help="bitcoind RPC username."),
-    ] = DEFAULT_BITCOIND_USER,
+    ] = DEFAULT_BITCOIND_RPC_USERNAME,
     bitcoind_host: Annotated[
         str,
         typer.Option("--bitcoind-host", help="bitcoind RPC host."),
-    ] = DEFAULT_BITCOIND_HOST,
+    ] = DEFAULT_BITCOIND_RPC_HOST,
     bitcoind_port: Annotated[
         int,
         typer.Option("--bitcoind-port", help="bitcoind RPC port."),
-    ] = DEFAULT_BITCOIND_PORT,
+    ] = DEFAULT_BITCOIND_RPC_PORT,
     indexer_url: Annotated[
         str,
         typer.Option("--indexer-url", help="Electrs indexer URL."),
@@ -680,7 +741,7 @@ def node_unlock(
 
     if is_interactive():
         use_defaults = typer.confirm(
-            "Use default rgbtools.org services (bitcoind, indexer, proxy)?", default=True
+            "Use default Kaleidoswap mutinynet services (bitcoind, indexer, proxy)?", default=True
         )
         if not use_defaults:
             bitcoind_user = typer.prompt("bitcoind RPC username", default=bitcoind_user)
@@ -692,10 +753,10 @@ def node_unlock(
             indexer_url = typer.prompt("Electrs indexer URL", default=indexer_url)
             proxy_endpoint = typer.prompt("RGB proxy endpoint", default=proxy_endpoint)
         else:
-            bitcoind_user = DEFAULT_BITCOIND_USER
-            bitcoind_pass = DEFAULT_BITCOIND_PASS
-            bitcoind_host = DEFAULT_BITCOIND_HOST
-            bitcoind_port = DEFAULT_BITCOIND_PORT
+            bitcoind_user = DEFAULT_BITCOIND_RPC_USERNAME
+            bitcoind_pass = DEFAULT_BITCOIND_RPC_PASSWORD
+            bitcoind_host = DEFAULT_BITCOIND_RPC_HOST
+            bitcoind_port = DEFAULT_BITCOIND_RPC_PORT
             indexer_url = DEFAULT_INDEXER_URL
             proxy_endpoint = DEFAULT_PROXY_ENDPOINT
         raw = typer.prompt("[OPTIONAL] Lightning announce alias (Enter to skip)", default="")

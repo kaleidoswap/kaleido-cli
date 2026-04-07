@@ -9,6 +9,8 @@ import typer
 from kaleido_cli.config import (
     _KEY_ALIASES,
     CONFIG_FILE,
+    DEFAULT_API_URL,
+    DEFAULT_NETWORK,
     CliConfig,
     load_config,
     save_config,
@@ -30,8 +32,8 @@ config_app = typer.Typer(
         "Manage CLI configuration stored in [green]~/.kaleido/config.json[/green].\n\n"
         "[bold]Config keys[/bold]\n\n"
         "  [green]node-url[/green]   URL of your RGB Lightning Node  (default: http://localhost:3001)\n"
-        "  [green]api-url[/green]    Kaleidoswap maker API URL       (default: https://api.kaleidoswap.com)\n"
-        "  [green]network[/green]    Bitcoin network                 (default: signet)\n"
+        f"  [green]api-url[/green]    Kaleidoswap maker API URL       (default: {DEFAULT_API_URL})\n"
+        f"  [green]network[/green]    Bitcoin network                 (default: {DEFAULT_NETWORK})\n"
         "  [green]spawn-dir[/green]  Directory for spawned nodes     (default: ~/.kaleido/spawn)\n"
     ),
 )
@@ -61,8 +63,8 @@ def config_show() -> None:
     epilog=(
         "[bold]Examples[/bold]\n\n"
         "  [cyan]kaleido config set node-url http://localhost:3001[/cyan]\n"
-        "  [cyan]kaleido config set api-url https://api.kaleidoswap.com[/cyan]\n"
-        "  [cyan]kaleido config set network regtest[/cyan]\n"
+        f"  [cyan]kaleido config set api-url {DEFAULT_API_URL}[/cyan]\n"
+        "  [cyan]kaleido config set network mutinynet[/cyan]\n"
         "  [cyan]kaleido config set spawn-dir ~/kaleido-nodes[/cyan]"
     ),
 )

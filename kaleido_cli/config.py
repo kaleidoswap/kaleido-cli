@@ -9,9 +9,27 @@ from pathlib import Path
 CONFIG_DIR = Path.home() / ".kaleido"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
-DEFAULT_API_URL = "https://api.kaleidoswap.com"
+DEFAULT_API_URL = "https://api.signet.kaleidoswap.com/"
 DEFAULT_NODE_URL = "http://localhost:3001"
-DEFAULT_NETWORK = "signet"
+DEFAULT_NETWORK = "mutinynet"
+
+RLN_SIGNET_CUSTOM_NETWORK = "signetcustom"
+MUTINYNET_ALIASES = {"mutinynet", "signetcustom", "customsignet"}
+
+DEFAULT_BITCOIND_RPC_USERNAME = "user"
+DEFAULT_BITCOIND_RPC_PASSWORD = "default_password"
+DEFAULT_BITCOIND_RPC_HOST = "bitcoind.signet.kaleidoswap.com"
+DEFAULT_BITCOIND_RPC_PORT = 38332
+DEFAULT_INDEXER_URL = "electrum.signet.kaleidoswap.com:60601"
+DEFAULT_PROXY_ENDPOINT = "rpcs://proxy.iriswallet.com/0.2/json-rpc"
+
+
+def normalize_network_name(network: str) -> str:
+    """Normalize friendly CLI aliases to the network value expected by RLN."""
+    lowered = network.strip().lower()
+    if lowered in MUTINYNET_ALIASES:
+        return RLN_SIGNET_CUSTOM_NETWORK
+    return lowered
 
 
 @dataclass
