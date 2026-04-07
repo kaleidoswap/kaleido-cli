@@ -182,7 +182,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "kaleido-sdk", specifier = "==0.1.2" },
+    { name = "kaleido-sdk", specifier = "==0.1.3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "pyyaml", specifier = ">=6.0.0" },
@@ -194,16 +194,16 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "kaleido-sdk"
-version = "0.1.2"
+version = "0.1.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic", extra = ["email"] },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c5/4d/d381d4f4c2975876c7170708e261e4e0802fecccbd068b2c16560889aa00/kaleido_sdk-0.1.2.tar.gz", hash = "sha256:014e663dad2ab08f0b3d8642d4329f6daaa8f75177376508da2f29bbd2730d04", size = 119899, upload-time = "2026-04-01T14:30:53.925Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f5/84/3d7bad2141a486f34553fcff5462246ad9e7dd7ff57823a3b9549163245c/kaleido_sdk-0.1.3.tar.gz", hash = "sha256:26e3e816d92144219cbe66bd88a20ef2f0eb43ec302c773017efaf9439134746", size = 119639, upload-time = "2026-04-07T13:13:09.084462Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f6/fb/3610d261c9977ab3fa788f590952e965cb82320407e62706f7a159d707a3/kaleido_sdk-0.1.2-py3-none-any.whl", hash = "sha256:a1a1ee9e89e7cfb28d1328b30b676c6605918282155ea34da1aa319c553e25ec", size = 47117, upload-time = "2026-04-01T14:30:52.686Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/a6/b6ee9495f3326ba85fe77740d5f031f6b04f5dda42b90f09d193bc38e312/kaleido_sdk-0.1.3-py3-none-any.whl", hash = "sha256:df79a0edb7bdeb7e720f07b450eab1f46adf4e6802ad6b5792fdb92c381e9904", size = 46893, upload-time = "2026-04-07T13:13:08.034370Z" },
 ]
 
 [[package]]

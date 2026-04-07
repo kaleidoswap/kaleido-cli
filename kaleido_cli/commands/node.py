@@ -509,7 +509,7 @@ async def _node_network() -> None:
     "init",
     epilog=(
         "[bold]Examples[/bold]\n\n"
-        "  Create a new wallet password interactively:\n"
+        "  Create a wallet password interactively:\n"
         "  [cyan]kaleido node init[/cyan]\n\n"
         "  Pass password directly:\n"
         "  [cyan]kaleido node init --password mysecret[/cyan]"
@@ -521,7 +521,7 @@ def node_init(
         typer.Option(
             "--password",
             "-p",
-            help="Wallet password. Prompted securely if omitted.",
+            help="New wallet password. Prompted securely if omitted.",
             hide_input=True,
         ),
     ] = None,

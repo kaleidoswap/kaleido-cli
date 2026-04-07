@@ -10,9 +10,10 @@ from typing import Any, TypeVar
 
 import typer
 from kaleido_sdk import (
-    ChannelFees,
     ChannelOrderResponse,
     CreateOrderRequest,
+    EstimateFeesRequest,
+    EstimateFeesResponse,
     Layer,
     LspInfoResponse,
     OrderRequest,
@@ -56,6 +57,18 @@ class ChannelOrderParams:
     client_asset_amount: int | None
     rfq_id: str | None
     email: str | None
+
+
+@dataclass(slots=True)
+class ChannelFeeEstimateParams:
+    lsp_balance_sat: int
+    client_balance_sat: int
+    channel_expiry_blocks: int
+    token: str | None
+    asset_id: str | None
+    lsp_asset_amount: int | None
+    client_asset_amount: int | None
+    rfq_id: str | None
 
 
 def _parse_iso_datetime(value: str) -> datetime | None:
@@ -522,6 +535,90 @@ def _resolve_channel_order_params(
     )
 
 
+def _resolve_channel_fee_estimate_params(
+    *,
+    lsp_balance_sat: int | None,
+    client_balance_sat: int | None,
+    channel_expiry_blocks: int,
+    token: str | None,
+    asset_id: str | None,
+    lsp_asset_amount: int | None,
+    client_asset_amount: int | None,
+    rfq_id: str | None,
+) -> ChannelFeeEstimateParams:
+    resolved_lsp_balance_sat: int
+    if lsp_balance_sat is not None:
+        resolved_lsp_balance_sat = lsp_balance_sat
+    elif is_interactive():
+        resolved_lsp_balance_sat = typer.prompt("LSP balance in channel (satoshis)", type=int)
+    else:
+        print_error("--lsp-balance is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    resolved_client_balance_sat: int
+    if client_balance_sat is not None:
+        resolved_client_balance_sat = client_balance_sat
+    elif is_interactive():
+        resolved_client_balance_sat = typer.prompt("Client balance in channel (satoshis)", type=int)
+    else:
+        print_error("--client-balance is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    if is_interactive():
+        channel_expiry_blocks = typer.prompt(
+            "Channel expiry blocks",
+            type=int,
+            default=channel_expiry_blocks,
+        )
+
+    resolved_token = _normalize_optional_text(token)
+    resolved_asset_id = _normalize_optional_text(asset_id)
+    resolved_rfq_id = _normalize_optional_text(rfq_id)
+
+    if is_interactive():
+        if resolved_asset_id is None and typer.confirm(
+            "Estimate fees for an RGB-backed channel?", default=False
+        ):
+            resolved_asset_id = _prompt_optional_text("Asset ID (rgb:...)")
+
+        if resolved_asset_id is not None:
+            if lsp_asset_amount is None:
+                lsp_asset_amount = _prompt_optional_int(
+                    "[OPTIONAL] LSP RGB asset amount (Enter to skip)"
+                )
+            if client_asset_amount is None:
+                client_asset_amount = _prompt_optional_int(
+                    "[OPTIONAL] Client RGB asset amount (Enter to skip)"
+                )
+        else:
+            lsp_asset_amount = None
+            client_asset_amount = None
+
+        if resolved_token is None:
+            resolved_token = _prompt_optional_text(
+                "[OPTIONAL] Authentication token (Enter to skip)"
+            )
+        if resolved_rfq_id is None:
+            resolved_rfq_id = _prompt_optional_text("[OPTIONAL] RFQ ID (Enter to skip)")
+
+    if (
+        lsp_asset_amount is not None or client_asset_amount is not None
+    ) and resolved_asset_id is None:
+        print_error("--lsp-asset-amount and --client-asset-amount require --asset-id.")
+        raise typer.Exit(1)
+
+    return ChannelFeeEstimateParams(
+        lsp_balance_sat=resolved_lsp_balance_sat,
+        client_balance_sat=resolved_client_balance_sat,
+        channel_expiry_blocks=channel_expiry_blocks,
+        token=resolved_token,
+        asset_id=resolved_asset_id,
+        lsp_asset_amount=lsp_asset_amount,
+        client_asset_amount=client_asset_amount,
+        rfq_id=resolved_rfq_id,
+    )
+
+
 def _build_channel_order_request(params: ChannelOrderParams) -> CreateOrderRequest:
     return CreateOrderRequest(
         client_pubkey=params.client_pubkey,
@@ -661,11 +758,23 @@ def _can_pay_channel_order(order: ChannelOrderResponse) -> bool:
     return order.payment.bolt11.state == PaymentState.EXPECT_PAYMENT
 
 
-async def _estimate_channel_order_fees(client: Any, params: ChannelOrderParams) -> ChannelFees:
-    return await client.maker.estimate_lsp_fees(_build_channel_order_request(params))
+async def _estimate_channel_order_fees(
+    client: Any, params: ChannelFeeEstimateParams
+) -> EstimateFeesResponse:
+    body = EstimateFeesRequest(
+        lsp_balance_sat=params.lsp_balance_sat,
+        client_balance_sat=params.client_balance_sat,
+        channel_expiry_blocks=params.channel_expiry_blocks,
+        token=params.token,
+        asset_id=params.asset_id,
+        lsp_asset_amount=params.lsp_asset_amount,
+        client_asset_amount=params.client_asset_amount,
+        rfq_id=params.rfq_id,
+    )
+    return await client.maker.estimate_lsp_fees(body)
 
 
-def _print_channel_order_fees(resp: ChannelFees, *, title: str) -> None:
+def _print_channel_order_fees(resp: EstimateFeesResponse, *, title: str) -> None:
     output_model(resp, title=title)
 
 
