@@ -506,22 +506,3 @@ async def _wallet_estimate_fee(blocks: int) -> None:
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
-
-
-@wallet_app.command(
-    "shutdown",
-    epilog="  [cyan]kaleido wallet shutdown[/cyan]   Gracefully shut down the node process.",
-)
-def wallet_shutdown() -> None:
-    """Gracefully shut down the node."""
-    asyncio.run(_wallet_shutdown())
-
-
-async def _wallet_shutdown() -> None:
-    try:
-        client = get_client(require_node=True)
-        await client.rln.shutdown()
-        print_success("Node shutdown initiated.")
-    except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)

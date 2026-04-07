@@ -27,7 +27,6 @@ from kaleido_sdk import (
     SwapStatusRequest,
     SwapStatusResponse,
     TradingPairsResponse,
-    parse_raw_amount,
 )
 from kaleido_sdk.rln import (
     GetSwapRequest,
@@ -55,6 +54,12 @@ from kaleido_cli.utils.pairs import (
     resolve_asset_id_for_layer,
     resolve_quote_layers,
     resolve_trading_pair,
+)
+from kaleido_cli.utils.prompts import (
+    display_amount_to_raw,
+    resolve_amount_pair,
+    resolve_pair,
+    resolve_required_text,
 )
 from kaleido_cli.utils.swaps import (
     decode_swapstring,
@@ -86,70 +91,6 @@ node_app = typer.Typer(
 swap_app.add_typer(order_app, name="order")
 swap_app.add_typer(atomic_app, name="atomic")
 swap_app.add_typer(node_app, name="node")
-
-
-def _resolve_pair(pair: str | None) -> str:
-    if pair is not None:
-        return pair
-    if is_interactive():
-        return typer.prompt("Trading pair (e.g. BTC/USDT)")
-    print_error("PAIR argument is required in non-interactive mode.")
-    raise typer.Exit(1)
-
-
-def _resolve_amount_pair(
-    from_amount: str | None,
-    to_amount: str | None,
-    *,
-    prompt_prefix: str,
-    default_choice: str,
-    pair: str,
-) -> tuple[str | None, str | None]:
-    base_ticker, _, quote_ticker = pair.partition("/")
-    send_label = base_ticker or "base asset"
-    receive_label = quote_ticker or "quote asset"
-    if from_amount is None and to_amount is None:
-        if is_interactive():
-            choice = typer.prompt(
-                f"{prompt_prefix} by [S]end amount or [R]eceive amount?",
-                default=default_choice,
-            )
-            if choice.strip().upper().startswith("R"):
-                return None, typer.prompt(f"Amount to receive ({receive_label}, display units)")
-            return typer.prompt(f"Amount to send ({send_label}, display units)"), None
-        print_error("Provide --from-amount or --to-amount in non-interactive mode.")
-        raise typer.Exit(1)
-    if from_amount is not None and to_amount is not None:
-        print_error("Provide exactly one of --from-amount or --to-amount.")
-        raise typer.Exit(1)
-    return from_amount, to_amount
-
-
-def _display_amount_to_raw(
-    value: str,
-    *,
-    precision: int | None,
-    asset_label: str,
-    option_name: str,
-) -> int:
-    normalized = value.strip()
-    if not normalized:
-        print_error(f"{option_name} cannot be empty.")
-        raise typer.Exit(1)
-    try:
-        return parse_raw_amount(normalized, precision or 0)
-    except ValueError as exc:
-        print_error(f"{option_name} for {asset_label}: {exc}")
-        raise typer.Exit(1)
-
-
-def _resolve_required_text(value: str | None, prompt: str, option_name: str) -> str:
-    if value is not None:
-        return value
-    if is_interactive():
-        return typer.prompt(prompt)
-    print_error(f"{option_name} is required in non-interactive mode.")
-    raise typer.Exit(1)
 
 
 def _resolve_accept_reject(accept: bool, reject: bool, prompt: str) -> bool:
@@ -207,7 +148,7 @@ async def _fetch_quote(
         raise typer.Exit(1)
 
     resolved_from_amount = (
-        _display_amount_to_raw(
+        display_amount_to_raw(
             from_amount,
             precision=from_asset.precision,
             asset_label=from_asset.ticker,
@@ -217,7 +158,7 @@ async def _fetch_quote(
         else None
     )
     resolved_to_amount = (
-        _display_amount_to_raw(
+        display_amount_to_raw(
             to_amount,
             precision=to_asset.precision,
             asset_label=to_asset.ticker,
@@ -309,17 +250,17 @@ def order_create(
     ] = None,
 ) -> None:
     """Create a maker swap order from a live quote."""
-    resolved_pair = _resolve_pair(pair)
-    resolved_from_amount, resolved_to_amount = _resolve_amount_pair(
+    resolved_pair = resolve_pair(pair)
+    resolved_from_amount, resolved_to_amount = resolve_amount_pair(
         from_amount, to_amount, prompt_prefix="Order", default_choice="R", pair=resolved_pair
     )
     resolved_from_layer, resolved_to_layer = resolve_quote_layers(
         resolved_pair, from_layer, to_layer
     )
-    resolved_receiver_address = _resolve_required_text(
+    resolved_receiver_address = resolve_required_text(
         receiver_address, "Receiver address / invoice", "--receiver-address"
     )
-    resolved_receiver_format = _resolve_required_text(
+    resolved_receiver_format = resolve_required_text(
         receiver_format,
         "Receiver format (e.g. BOLT11, RGB_INVOICE, BTC_ADDRESS)",
         "--receiver-format",
@@ -400,7 +341,7 @@ def order_decide(
     ] = "",
 ) -> None:
     """Submit a rate decision for a pending maker swap order."""
-    resolved_order_id = _resolve_required_text(order_id, "Swap order ID", "ORDER_ID argument")
+    resolved_order_id = resolve_required_text(order_id, "Swap order ID", "ORDER_ID argument")
     accept_new_rate = _resolve_accept_reject(accept, reject, "Accept the new quoted rate?")
     asyncio.run(_order_decide(resolved_order_id, accept_new_rate, access_token))
 
@@ -559,8 +500,8 @@ def atomic_init(
     ] = False,
 ) -> None:
     """Initialize an atomic swap against the maker server using a live quote."""
-    resolved_pair = _resolve_pair(pair)
-    resolved_from_amount, resolved_to_amount = _resolve_amount_pair(
+    resolved_pair = resolve_pair(pair)
+    resolved_from_amount, resolved_to_amount = resolve_amount_pair(
         from_amount,
         to_amount,
         prompt_prefix="Atomic swap",
@@ -660,9 +601,9 @@ def atomic_execute(
     ] = False,
 ) -> None:
     """Execute an atomic swap against the maker server."""
-    resolved_swapstring = _resolve_required_text(swapstring, "Swap string", "--swapstring")
-    resolved_taker_pubkey = _resolve_required_text(taker_pubkey, "Taker pubkey", "--taker-pubkey")
-    resolved_payment_hash = _resolve_required_text(payment_hash, "Payment hash", "--payment-hash")
+    resolved_swapstring = resolve_required_text(swapstring, "Swap string", "--swapstring")
+    resolved_taker_pubkey = resolve_required_text(taker_pubkey, "Taker pubkey", "--taker-pubkey")
+    resolved_payment_hash = resolve_required_text(payment_hash, "Payment hash", "--payment-hash")
     if is_interactive() and not auto_whitelist:
         auto_whitelist = typer.confirm(
             "Auto-whitelist on the local taker node before executing?",
@@ -808,8 +749,8 @@ def atomic_run(
     ] = False,
 ) -> None:
     """Run an atomic swap end-to-end using the local node as taker."""
-    resolved_pair = _resolve_pair(pair)
-    resolved_from_amount, resolved_to_amount = _resolve_amount_pair(
+    resolved_pair = resolve_pair(pair)
+    resolved_from_amount, resolved_to_amount = resolve_amount_pair(
         from_amount,
         to_amount,
         prompt_prefix="Atomic swap",
@@ -1001,7 +942,7 @@ def node_whitelist(
     ] = None,
 ) -> None:
     """Whitelist a swap on the local taker node via /taker."""
-    resolved_swapstring = _resolve_required_text(swapstring, "Swap string", "--swapstring")
+    resolved_swapstring = resolve_required_text(swapstring, "Swap string", "--swapstring")
     asyncio.run(_node_whitelist(resolved_swapstring))
 
 
@@ -1040,8 +981,8 @@ def node_execute(
     ] = None,
 ) -> None:
     """Execute a low-level local node swap via maker-execute."""
-    resolved_swapstring = _resolve_required_text(swapstring, "Swap string", "--swapstring")
-    resolved_payment_secret = _resolve_required_text(
+    resolved_swapstring = resolve_required_text(swapstring, "Swap string", "--swapstring")
+    resolved_payment_secret = resolve_required_text(
         payment_secret, "Payment secret", "--payment-secret"
     )
     asyncio.run(_node_execute(resolved_swapstring, resolved_payment_secret, taker_pubkey))
@@ -1089,7 +1030,7 @@ def node_status(
     maker: Annotated[bool, typer.Option("--maker", help="Look up the maker-side swap.")] = False,
 ) -> None:
     """Check a local node swap by payment hash."""
-    resolved_payment_hash = _resolve_required_text(
+    resolved_payment_hash = resolve_required_text(
         payment_hash, "Payment hash", "PAYMENT_HASH argument"
     )
     if not taker and not maker:

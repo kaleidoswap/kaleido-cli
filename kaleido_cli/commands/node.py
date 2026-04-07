@@ -51,6 +51,7 @@ node_app = typer.Typer(
         "[bold]After starting:[/bold]\n"
         "  [cyan]kaleido node init[/cyan]             — initialize node wallet (once)\n"
         "  [cyan]kaleido node unlock[/cyan]           — unlock wallet after restart\n"
+        "  [cyan]kaleido node shutdown[/cyan]        — gracefully shut down the node process\n"
         "  [cyan]kaleido node info[/cyan]             — check node reachability and details\n"
     ),
 )
@@ -416,6 +417,25 @@ def node_stop(
         print_success(f"Environment '{name}' stopped.")
     else:
         raise typer.Exit(rc)
+
+
+@node_app.command(
+    "shutdown",
+    epilog="  [cyan]kaleido node shutdown[/cyan]   Gracefully shut down the configured node process.",
+)
+def node_shutdown() -> None:
+    """Gracefully shut down the configured node."""
+    asyncio.run(_node_shutdown())
+
+
+async def _node_shutdown() -> None:
+    try:
+        client = get_client(require_node=True)
+        await client.rln.shutdown()
+        print_success("Node shutdown initiated.")
+    except Exception as e:
+        print_error(f"Error: {e}")
+        raise typer.Exit(1)
 
 
 @node_app.command(
