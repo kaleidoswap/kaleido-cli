@@ -152,23 +152,31 @@ def run_setup(
                 if not is_interactive():
                     print_error(
                         f"Environment '{resolved_env_name}' already exists at {env_dir}. "
-                        "Run interactively to overwrite it or choose a different path with --spawn-dir."
+                        "Choose a different path with --spawn-dir to create a new node."
                     )
                     raise typer.Exit(1)
-                overwrite = typer.confirm(
+                use_different_path = typer.confirm(
                     f"Environment '{resolved_env_name}' already exists at {env_dir}. "
-                    "Overwrite its compose file?",
+                    "Create the new node in a different base directory?",
+                    default=True,
+                )
+                if use_different_path:
+                    suggested_base_dir = _next_available_base_dir(base_dir, resolved_env_name)
+                    base_dir_input = typer.prompt(
+                        "Choose a different base directory for node environments",
+                        default=str(suggested_base_dir),
+                    )
+                    base_dir = Path(base_dir_input).expanduser().resolve()
+                    continue
+                overwrite = typer.confirm(
+                    "Overwrite only the compose file? Existing node data may still be reused.",
                     default=False,
                 )
-                if overwrite:
-                    print_info(f"Overwriting compose file for '{resolved_env_name}' at {env_dir}.")
-                    break
-                suggested_base_dir = _next_available_base_dir(base_dir, resolved_env_name)
-                base_dir_input = typer.prompt(
-                    "Choose a different base directory for node environments",
-                    default=str(suggested_base_dir),
-                )
-                base_dir = Path(base_dir_input).expanduser().resolve()
+                if not overwrite:
+                    print_info("Aborted.")
+                    raise typer.Exit(0)
+                print_info(f"Overwriting compose file for '{resolved_env_name}' at {env_dir}.")
+                break
 
             if should_create_node:
                 config.spawn_dir = str(base_dir)
