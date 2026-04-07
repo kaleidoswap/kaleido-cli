@@ -9,8 +9,8 @@ from typing import Any
 import typer
 
 from .config import load_config, save_config
-from .docker_manager import DEFAULT_SPAWN_DIR, DockerManager, SpawnConfig, SpawnManager
-from .output import print_error, print_info, print_panel, print_success
+from .docker_manager import COMPOSE_FILE, DEFAULT_SPAWN_DIR, SpawnConfig, SpawnManager
+from .output import is_interactive, print_error, print_info, print_panel, print_success
 
 
 class SetupMode(str, Enum):
@@ -48,6 +48,15 @@ def _confirm_or_default(
     if use_defaults:
         return default
     return typer.confirm(label, default=default)
+
+
+def _next_available_base_dir(base_dir: Path, env_name: str) -> Path:
+    """Suggest a sibling base directory where the requested env name is available."""
+    for suffix in range(2, 100):
+        candidate = base_dir.parent / f"{base_dir.name}-{suffix}"
+        if not (candidate / env_name / COMPOSE_FILE).exists():
+            return candidate
+    return base_dir.parent / f"{base_dir.name}-new"
 
 
 def run_setup(
@@ -138,53 +147,42 @@ def run_setup(
                 True,
                 use_defaults=defaults,
             )
-            env_dir = base_dir / resolved_env_name
-            manager = SpawnManager(
-                SpawnConfig(
-                    name=resolved_env_name,
-                    count=count,
-                    network=config.network,
-                    disable_authentication=True,
-                    spawn_base_dir=str(base_dir),
-                )
-            )
-            if (env_dir / "docker-compose.yml").exists():
-                if defaults:
-                    existing_manager = DockerManager(str(env_dir))
-                    print_info(f"Reusing existing environment '{resolved_env_name}' at {env_dir}.")
-                    if created_env_started:
-                        if not existing_manager._validate():
-                            raise typer.Exit(1)
-                        print_info(f"Starting environment '{resolved_env_name}' …")
-                        rc = existing_manager._run(["up", "-d"])
-                        if rc != 0:
-                            raise typer.Exit(rc)
-                        print_success(f"Environment '{resolved_env_name}' is up.")
-
-                    config.spawn_dir = str(base_dir)
-                    urls = existing_manager.node_urls()
-                    if not urls:
-                        print_error(
-                            f"Could not find any node URLs in existing environment '{resolved_env_name}'."
-                        )
-                        raise typer.Exit(1)
-                    config.node_url = urls[0]
-                    save_config(config)
-                    print_success(f"Active node-url → {config.node_url}")
-                    should_create_node = False
-                else:
-                    overwrite = typer.confirm(
-                        f"Environment '{resolved_env_name}' already exists at {env_dir}. Overwrite?",
-                        default=False,
+            while (base_dir / resolved_env_name / COMPOSE_FILE).exists():
+                env_dir = base_dir / resolved_env_name
+                if not is_interactive():
+                    print_error(
+                        f"Environment '{resolved_env_name}' already exists at {env_dir}. "
+                        "Run interactively to overwrite it or choose a different path with --spawn-dir."
                     )
-                    if not overwrite:
-                        print_info("Aborted.")
-                        raise typer.Exit(0)
+                    raise typer.Exit(1)
+                overwrite = typer.confirm(
+                    f"Environment '{resolved_env_name}' already exists at {env_dir}. "
+                    "Overwrite its compose file?",
+                    default=False,
+                )
+                if overwrite:
+                    print_info(f"Overwriting compose file for '{resolved_env_name}' at {env_dir}.")
+                    break
+                suggested_base_dir = _next_available_base_dir(base_dir, resolved_env_name)
+                base_dir_input = typer.prompt(
+                    "Choose a different base directory for node environments",
+                    default=str(suggested_base_dir),
+                )
+                base_dir = Path(base_dir_input).expanduser().resolve()
 
             if should_create_node:
                 config.spawn_dir = str(base_dir)
                 save_config(config)
 
+                manager = SpawnManager(
+                    SpawnConfig(
+                        name=resolved_env_name,
+                        count=count,
+                        network=config.network,
+                        disable_authentication=True,
+                        spawn_base_dir=str(base_dir),
+                    )
+                )
                 rc = manager.spawn(start=created_env_started)
                 if rc != 0:
                     raise typer.Exit(rc)
