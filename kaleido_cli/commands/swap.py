@@ -579,7 +579,7 @@ async def _atomic_init(
         "  Auto-whitelist before executing:\n"
         "  [cyan]kaleido swap atomic execute --auto-whitelist --swapstring '<swapstring>' "
         "--taker-pubkey 03ab... --payment-hash deadbeef...[/cyan]\n\n"
-        "[dim]Use the taker node pubkey from 'kaleido node taker pubkey' or your node's pubkey.[/dim]"
+        "[dim]Use the taker node pubkey from 'kaleido swap node pubkey' or your node's pubkey.[/dim]"
     ),
 )
 def atomic_execute(
@@ -844,6 +844,28 @@ async def _atomic_run(
             )
     except typer.Exit:
         raise
+    except Exception as e:
+        print_error(f"Error: {e}")
+        raise typer.Exit(1)
+
+
+@node_app.command(
+    "pubkey",
+    epilog="  [cyan]kaleido swap node pubkey[/cyan]   Print the local node's taker public key.",
+)
+def node_pubkey() -> None:
+    """Show the local node's taker public key used in swap operations."""
+    asyncio.run(_node_pubkey())
+
+
+async def _node_pubkey() -> None:
+    try:
+        client = get_client(require_node=True)
+        pubkey = await client.rln.get_taker_pubkey()
+        if is_json_mode():
+            print_json({"pubkey": pubkey})
+        else:
+            print_success(f"Taker pubkey: {pubkey}")
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)

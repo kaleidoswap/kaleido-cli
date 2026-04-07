@@ -232,9 +232,8 @@ kaleido --json market pairs
 | `kaleido node init`                       | Initialise node wallet (once after first start)     |
 | `kaleido node unlock`                     | Unlock wallet (after every restart)                 |
 | `kaleido node lock`                       | Lock the wallet                                     |
-| `kaleido node info`                       | Show detailed node + network info                   |
-| `kaleido node taker pubkey`               | Show the node's taker public key                    |
-| `kaleido node taker whitelist <swap>`     | Whitelist a swap on the taker side                  |
+| `kaleido node info`                       | Show node info from `/nodeinfo`                     |
+| `kaleido node network`                    | Show network info from `/networkinfo`               |
 
 ### `wallet` — BTC wallet
 
@@ -307,6 +306,7 @@ kaleido market quote BTC/USDT --from-amount 100000 --from-layer BTC_LN --to-laye
 | `kaleido swap atomic init <pair>`   | Initialize an atomic swap against the maker server       |
 | `kaleido swap atomic execute`       | Execute an atomic swap against the maker server          |
 | `kaleido swap atomic status <hash>` | Check atomic swap status against the maker server        |
+| `kaleido swap node pubkey`          | Show the local node's taker public key                   |
 | `kaleido swap node init`            | Initialize a low-level local node swap                   |
 | `kaleido swap node whitelist`       | Whitelist a swap on the local taker node                 |
 | `kaleido swap node execute`         | Execute a low-level local node swap                      |
