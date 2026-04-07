@@ -6,7 +6,7 @@ from typing import Annotated
 
 import typer
 
-from .config import load_config
+from .config import DEFAULT_API_URL, DEFAULT_NETWORK, load_config
 from .context import state
 from .onboarding import SetupMode, run_setup
 from .output import set_agent_mode, set_json_mode
@@ -20,7 +20,8 @@ app = typer.Typer(
     help=(
         "Manage RGB Lightning Nodes and interact with the Kaleidoswap protocol.\n\n"
         "[bold]First time here?[/bold]\n\n"
-        "  [cyan]kaleido setup[/cyan]               Guided setup for market-only or local-node use\n\n"
+        "  [cyan]kaleido setup[/cyan]               Create/start one mutinynet node with defaults\n"
+        "  [cyan]kaleido setup signetcustom[/cyan]  Create/start a node on a specific network\n\n"
         "[bold]Global flags[/bold] can be placed before any sub-command:\n\n"
         "  [cyan]kaleido --node-url http://localhost:3001 wallet balance[/cyan]\n"
         "  [cyan]kaleido --json market pairs[/cyan]\n"
@@ -77,15 +78,23 @@ def _root(
     "setup",
     epilog=(
         "[bold]Examples[/bold]\n\n"
-        "  Interactive first-run setup:\n"
+        "  Create and start one mutinynet node with defaults:\n"
         "  [cyan]kaleido setup[/cyan]\n\n"
+        "  Create and start one node on an explicit network:\n"
+        "  [cyan]kaleido setup signetcustom[/cyan]\n\n"
         "  Market-only defaults without prompts:\n"
         "  [cyan]kaleido setup --mode market --defaults[/cyan]\n\n"
-        "  Create and start a local node environment with defaults:\n"
-        "  [cyan]kaleido setup --mode local --create-node --defaults[/cyan]"
+        "  Use a custom environment name:\n"
+        "  [cyan]kaleido setup mutinynet --env-name taker-1[/cyan]"
     ),
 )
 def setup_command(
+    network: Annotated[
+        str | None,
+        typer.Argument(
+            help="Bitcoin network for the local node. Defaults to mutinynet.",
+        ),
+    ] = None,
     mode: Annotated[
         SetupMode | None,
         typer.Option("--mode", help="Setup profile: 'market' or 'local'."),
@@ -100,10 +109,6 @@ def setup_command(
     api_url: Annotated[
         str | None,
         typer.Option("--api-url", help="Kaleidoswap API URL to save in config."),
-    ] = None,
-    network: Annotated[
-        str | None,
-        typer.Option("--network", help="Bitcoin network to save in config."),
     ] = None,
     node_url: Annotated[
         str | None,
@@ -133,14 +138,20 @@ def setup_command(
         typer.Option("--start/--no-start", help="Start the node environment after creating it."),
     ] = None,
 ) -> None:
-    """Guide first-time configuration and optionally create a local node environment."""
+    """Create a local mutinynet node by default, or run the selected setup profile."""
+    resolved_mode = mode or SetupMode.local
+    resolved_defaults = defaults or mode is None
+    resolved_create_node = create_node
+    if mode is None and resolved_create_node is None:
+        resolved_create_node = True
+
     run_setup(
-        mode=mode,
-        defaults=defaults,
-        api_url=api_url,
-        network=network,
+        mode=resolved_mode,
+        defaults=resolved_defaults,
+        api_url=api_url or (DEFAULT_API_URL if resolved_mode == SetupMode.local else None),
+        network=network or (DEFAULT_NETWORK if resolved_mode == SetupMode.local else None),
         node_url=node_url,
-        create_node=create_node,
+        create_node=resolved_create_node,
         spawn_dir=spawn_dir,
         env_name=env_name,
         node_count=node_count,
