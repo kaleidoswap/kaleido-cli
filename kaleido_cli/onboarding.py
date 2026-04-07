@@ -50,13 +50,13 @@ def _confirm_or_default(
     return typer.confirm(label, default=default)
 
 
-def _next_available_base_dir(base_dir: Path, env_name: str) -> Path:
-    """Suggest a sibling base directory where the requested env name is available."""
+def _next_available_env_name(base_dir: Path, env_name: str) -> str:
+    """Suggest an environment name that is available under the base directory."""
     for suffix in range(2, 100):
-        candidate = base_dir.parent / f"{base_dir.name}-{suffix}"
-        if not (candidate / env_name / COMPOSE_FILE).exists():
+        candidate = f"{env_name}-{suffix}"
+        if not (base_dir / candidate / COMPOSE_FILE).exists():
             return candidate
-    return base_dir.parent / f"{base_dir.name}-new"
+    return f"{env_name}-new"
 
 
 def run_setup(
@@ -120,10 +120,13 @@ def run_setup(
         )
 
         if should_create_node:
+            default_base_dir = (
+                str(DEFAULT_SPAWN_DIR) if defaults else config.spawn_dir or str(DEFAULT_SPAWN_DIR)
+            )
             base_dir_input = _value_or_prompt(
                 spawn_dir,
                 "Base directory for node environments",
-                config.spawn_dir or str(DEFAULT_SPAWN_DIR),
+                default_base_dir,
                 use_defaults=defaults,
             )
             base_dir = Path(base_dir_input).expanduser().resolve()
@@ -152,21 +155,20 @@ def run_setup(
                 if not is_interactive():
                     print_error(
                         f"Environment '{resolved_env_name}' already exists at {env_dir}. "
-                        "Choose a different path with --spawn-dir to create a new node."
+                        "Choose a different environment name with --env-name to create a new node."
                     )
                     raise typer.Exit(1)
                 use_different_path = typer.confirm(
                     f"Environment '{resolved_env_name}' already exists at {env_dir}. "
-                    "Create the new node in a different base directory?",
+                    "Create the new node in a different folder under the same base directory?",
                     default=True,
                 )
                 if use_different_path:
-                    suggested_base_dir = _next_available_base_dir(base_dir, resolved_env_name)
-                    base_dir_input = typer.prompt(
-                        "Choose a different base directory for node environments",
-                        default=str(suggested_base_dir),
+                    resolved_env_name = typer.prompt(
+                        "Choose a different environment folder name",
+                        default=_next_available_env_name(base_dir, resolved_env_name),
                     )
-                    base_dir = Path(base_dir_input).expanduser().resolve()
+                    created_env_name = resolved_env_name
                     continue
                 overwrite = typer.confirm(
                     "Overwrite only the compose file? Existing node data may still be reused.",

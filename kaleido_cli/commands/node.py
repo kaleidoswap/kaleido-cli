@@ -193,7 +193,9 @@ async def _taker_whitelist(swapstring: str) -> None:
 def node_create(
     name: Annotated[
         str | None,
-        typer.Argument(help="Environment name (directory under spawn-dir). Prompted if omitted."),
+        typer.Argument(
+            help="Environment name (directory under ~/.kaleido by default). Prompted if omitted."
+        ),
     ] = None,
 ) -> None:
     """[bold]Wizard:[/bold] configure and generate a named compose environment."""
@@ -202,7 +204,7 @@ def node_create(
     print_info("\n  Kaleido Node Create Wizard")
     print_info("  " + "─" * 38)
 
-    # ── Base spawn directory ─────────────────────────────────────────────────
+    # ── Base environment directory ───────────────────────────────────────────
     default_base = str(state.config.spawn_dir or DEFAULT_SPAWN_DIR)
     spawn_base_input = typer.prompt(
         "  Base directory for environments",
@@ -212,7 +214,7 @@ def node_create(
     if str(base) != str(Path(default_base).expanduser().resolve()):
         state.config.spawn_dir = str(base)
         save_config(state.config)
-        print_info(f"  Saved spawn-dir → {base}")
+        print_info(f"  Saved environment base directory → {base}")
 
     # ── Environment name ─────────────────────────────────────────────────────
     resolved_name: str

@@ -123,10 +123,11 @@ Valid config keys: `api-url`, `node-url`, `network`, `spawn-dir`
 
 ## Node Environments
 
-The CLI uses a **named environment** model. Each environment is an isolated Docker Compose setup with its own compose file and data volumes stored under a base directory (default: `~/.kaleido/spawn/`).
+The CLI uses a **named environment** model. Each environment is an isolated Docker Compose setup with its own compose file and data volumes stored under `~/.kaleido/` by default.
 
 ```
-~/.kaleido/spawn/
+~/.kaleido/
+├── config.json
 ├── mainenv/
 │   ├── docker-compose.yml
 │   └── volumes/
@@ -152,7 +153,7 @@ kaleido node create testenv
 
 The wizard prompts for:
 
-1. **Base directory** — where all environments are stored (saved to config as `spawn-dir`)
+1. **Base directory** — where all environments are stored (default: `~/.kaleido`, saved to config as `spawn-dir`)
 2. **Environment name** — becomes a subdirectory under the base dir
 3. **Node count** — number of RGB Lightning Nodes to spin up
 4. **Network** — `mutinynet` (default), `signetcustom`/`customsignet`, `signet`, `regtest`, or `mainnet`
@@ -186,9 +187,9 @@ kaleido node use testenv --node 2   # use node 2 of 'testenv' (port 3002)
 `kaleido node list` marks the currently active node with `●`:
 
 ```
-Environments in ~/.kaleido/spawn:
+Environments in ~/.kaleido:
 
-  testenv  →  ~/.kaleido/spawn/testenv
+  testenv  →  ~/.kaleido/testenv
     ● node 1: http://localhost:3001
     ○ node 2: http://localhost:3002
 ```
