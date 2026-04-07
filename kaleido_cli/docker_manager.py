@@ -9,6 +9,7 @@ from pathlib import Path
 
 import yaml
 
+from .config import DEFAULT_NETWORK, normalize_network_name
 from .output import print_error, print_info, print_success, print_warning
 
 COMPOSE_FILE = "docker-compose.yml"
@@ -73,7 +74,7 @@ class SpawnConfig:
     spawn_base_dir: str = ""  # "" → ~/.kaleido/spawn  (env lives at base/name)
 
     count: int = 1
-    network: str = "regtest"
+    network: str = DEFAULT_NETWORK
     # Docker network
     network_name: str = DEFAULT_NETWORK_NAME
     network_external: bool = False
@@ -265,7 +266,8 @@ class SpawnManager(DockerManager):
             ]
             if cfg.disable_authentication:
                 cmd_parts.append("--disable-authentication")
-            cmd_parts.append(f"--network {cfg.network}")
+            rln_network = normalize_network_name(cfg.network)
+            cmd_parts.append(f"--network {rln_network}")
 
             service: dict = {
                 "image": RLN_IMAGE,
@@ -279,7 +281,7 @@ class SpawnManager(DockerManager):
                 "volumes": [f"{host_data}:{container_data}"],
                 "environment": {
                     "APP_ENV": "${APP_ENV:-test}",
-                    "NETWORK": "${NETWORK:-" + cfg.network + "}",
+                    "NETWORK": "${NETWORK:-" + rln_network + "}",
                     "DAEMON_PORT": daemon_port,
                 },
                 "healthcheck": {
