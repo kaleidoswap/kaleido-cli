@@ -558,7 +558,7 @@ async def _node_info() -> None:
     "init",
     epilog=(
         "[bold]Examples[/bold]\n\n"
-        "  Interactive prompt:\n"
+        "  Create a wallet password interactively:\n"
         "  [cyan]kaleido node init[/cyan]\n\n"
         "  Pass password directly:\n"
         "  [cyan]kaleido node init --password mysecret[/cyan]"
@@ -570,7 +570,7 @@ def node_init(
         typer.Option(
             "--password",
             "-p",
-            help="Wallet password. Prompted securely if omitted.",
+            help="New wallet password. Prompted securely if omitted.",
             hide_input=True,
         ),
     ] = None,
@@ -585,7 +585,7 @@ def node_init(
         resolved_password = password
     else:
         resolved_password = typer.prompt(
-            "Wallet password", hide_input=True, confirmation_prompt=True
+            "Create a new wallet password", hide_input=True, confirmation_prompt=True
         )
     asyncio.run(_node_init(resolved_password, mnemonic))
 
