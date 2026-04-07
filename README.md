@@ -42,10 +42,13 @@ Then run:
 kaleido setup
 ```
 
-`kaleido setup` walks you through either:
+`kaleido setup` creates and starts one mutinynet node with defaults. You can also run:
 
-- a market-only setup that works without Docker
-- a local-node setup that creates a Docker environment for you
+```bash
+kaleido setup signetcustom
+```
+
+Use `kaleido setup --mode market --defaults` for a market-only setup that works without Docker.
 
 ### Alternative installers
 
@@ -138,7 +141,8 @@ The CLI uses a **named environment** model. Each environment is an isolated Dock
 ### Creating an environment
 
 ```bash
-kaleido node setup                  # create/start one mutinynet node with defaults
+kaleido setup                       # create/start one mutinynet node with defaults
+kaleido setup signetcustom          # create/start one node on an explicit network
 kaleido node create
 # or give it a name directly:
 kaleido node create testenv
@@ -214,8 +218,7 @@ kaleido --json market pairs
 
 | Command                                   | Description                                         |
 |-------------------------------------------|-----------------------------------------------------|
-| `kaleido setup`                           | Guided first-run setup for market-only or local use |
-| `kaleido node setup`                      | Create/start one mutinynet node with defaults       |
+| `kaleido setup [network]`                 | Create/start one node, mutinynet by default         |
 | `kaleido node create [name]`              | Wizard: configure and generate a named environment  |
 | `kaleido node list`                       | List all environments with node URLs                |
 | `kaleido node use <name> [--node N]`      | Set node-url to node N in an environment            |
@@ -326,17 +329,17 @@ kaleido market quote BTC/USDT --from-amount 100000 --from-layer BTC_LN --to-laye
 # 1. Install
 curl -fsSL https://raw.githubusercontent.com/kaleidoswap/kaleido-cli/master/install.sh | sh
 
-# 2. Run the guided setup
+# 2. Create/start one mutinynet node
 kaleido setup
 
-# 3. If you chose a local node, initialise and unlock the wallet
+# 3. Initialise and unlock the wallet
 kaleido node init
 kaleido node unlock
 
-# 4. If you chose a local node, confirm it is healthy
+# 4. Confirm the node is healthy
 kaleido node info
 
-# 5. If you chose a local node, get a funding address
+# 5. Get a funding address
 kaleido wallet address
 
 # 6. Browse available trading pairs
@@ -349,7 +352,7 @@ kaleido market quote BTC/USDT --from-amount 100000
 For a non-interactive local setup with mutinynet defaults:
 
 ```bash
-kaleido node setup
+kaleido setup
 ```
 
 ### Working with multiple nodes

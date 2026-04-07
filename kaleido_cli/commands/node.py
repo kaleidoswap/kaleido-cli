@@ -10,7 +10,6 @@ import typer
 from kaleido_sdk.rln import TakerRequest
 
 from kaleido_cli.config import (
-    DEFAULT_API_URL,
     DEFAULT_BITCOIND_RPC_HOST,
     DEFAULT_BITCOIND_RPC_PASSWORD,
     DEFAULT_BITCOIND_RPC_PORT,
@@ -29,7 +28,6 @@ from kaleido_cli.docker_manager import (
     SpawnManager,
     list_spawn_names,
 )
-from kaleido_cli.onboarding import SetupMode, run_setup
 from kaleido_cli.output import (
     is_interactive,
     is_json_mode,
@@ -47,7 +45,8 @@ node_app = typer.Typer(
     help=(
         "Manage named RGB Lightning Node environments via Docker.\n\n"
         "[bold]Creating an environment:[/bold]\n"
-        "  [cyan]kaleido node setup[/cyan]           — create one mutinynet node with defaults\n"
+        "  [cyan]kaleido setup[/cyan]                — create one mutinynet node with defaults\n"
+        "  [cyan]kaleido setup <network>[/cyan]      — create one node on a specific network\n"
         "  [cyan]kaleido node create[/cyan]          — wizard: configure ports, network\n\n"
         "[bold]Managing environments:[/bold]\n"
         "  [cyan]kaleido node list[/cyan]             — list all environments with their node URLs\n"
@@ -178,62 +177,6 @@ async def _taker_whitelist(swapstring: str) -> None:
 # ---------------------------------------------------------------------------
 # Environment management
 # ---------------------------------------------------------------------------
-
-
-@node_app.command(
-    "setup",
-    epilog=(
-        "[bold]Examples[/bold]\n\n"
-        "  Create and start one mutinynet node with defaults:\n"
-        "  [cyan]kaleido node setup[/cyan]\n"
-        "  [cyan]kaleido node setup --mutinynet[/cyan]\n\n"
-        "  Use a custom environment name:\n"
-        "  [cyan]kaleido node setup --env-name taker-1[/cyan]"
-    ),
-)
-def node_setup(
-    mutinynet: Annotated[
-        bool,
-        typer.Option(
-            "--mutinynet",
-            help="Use Kaleidoswap custom signet/mutinynet defaults. This is also the default.",
-        ),
-    ] = False,
-    network: Annotated[
-        str | None,
-        typer.Option("--network", help="Bitcoin network to pass to RLN (default: mutinynet)."),
-    ] = None,
-    spawn_dir: Annotated[
-        str | None,
-        typer.Option("--spawn-dir", help="Base directory for local node environments."),
-    ] = None,
-    env_name: Annotated[
-        str | None,
-        typer.Option("--env-name", help="Environment name when creating the local node."),
-    ] = None,
-    node_count: Annotated[
-        int | None,
-        typer.Option("--node-count", min=1, help="Number of nodes to create."),
-    ] = None,
-    start: Annotated[
-        bool,
-        typer.Option("--start/--no-start", help="Start the node environment after creating it."),
-    ] = True,
-) -> None:
-    """Create a local RLN environment using Kaleidoswap mutinynet defaults."""
-    resolved_network = DEFAULT_NETWORK if mutinynet or network is None else network
-    run_setup(
-        mode=SetupMode.local,
-        defaults=True,
-        api_url=DEFAULT_API_URL,
-        network=resolved_network,
-        node_url=None,
-        create_node=True,
-        spawn_dir=spawn_dir,
-        env_name=env_name,
-        node_count=node_count,
-        start=start,
-    )
 
 
 @node_app.command(
