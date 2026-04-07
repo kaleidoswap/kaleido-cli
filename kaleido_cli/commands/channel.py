@@ -3,26 +3,35 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Annotated, Any
+from time import perf_counter
+from typing import Annotated, Any, TypeVar
 
 import typer
 from kaleido_sdk import (
     ChannelFees,
     ChannelOrderResponse,
     CreateOrderRequest,
+    Layer,
     LspInfoResponse,
     NetworkInfoResponse,
     OrderRequest,
+    PairQuoteRequest,
+    PaymentState,
     RateDecisionRequest,
     RateDecisionResponse,
+    SwapLegInput,
 )
 from kaleido_sdk.rln import (
     CloseChannelRequest,
+    ConnectPeerRequest,
     ListChannelsResponse,
     OpenChannelRequest,
     OpenChannelResponse,
+    SendPaymentRequest,
+    SendPaymentResponse,
 )
 
 from kaleido_cli.context import get_client
@@ -32,6 +41,7 @@ from kaleido_cli.output import (
     output_collection,
     output_model,
     print_error,
+    print_info,
     print_json,
     print_panel,
     print_success,
@@ -46,7 +56,7 @@ channel_app = typer.Typer(
 order_app = typer.Typer(
     no_args_is_help=True,
     rich_markup_mode="rich",
-    help="LSP-backed channel order flow: create, inspect, decide, and estimate fees.",
+    help="LSP-backed channel order flow: create, inspect, pay, decide, and estimate fees.",
 )
 lsp_app = typer.Typer(
     no_args_is_help=True,
@@ -59,6 +69,9 @@ channel_app.add_typer(lsp_app, name="lsp")
 
 CHANNEL_LSP_CREATE_ORDER_PATH = "/api/v1/lsps1/create_order"
 CHANNEL_LSP_GET_ORDER_PATH = "/api/v1/lsps1/get_order"
+CHANNEL_ORDER_HTTP_TIMEOUT = 30.0
+
+T = TypeVar("T")
 
 
 @dataclass(slots=True)
@@ -138,6 +151,217 @@ def _prompt_optional_int(prompt: str) -> int | None:
         raise typer.Exit(1)
 
 
+def _range_text(min_value: int | None, max_value: int | None) -> str:
+    if min_value is None and max_value is None:
+        return "any"
+    if min_value is None:
+        return f"<= {max_value}"
+    if max_value is None:
+        return f">= {min_value}"
+    return f"{min_value} -> {max_value}"
+
+
+def _validate_int_range(
+    value: int,
+    label: str,
+    *,
+    min_value: int | None = None,
+    max_value: int | None = None,
+) -> int:
+    if min_value is not None and value < min_value:
+        print_error(f"{label} must be at least {min_value}.")
+        raise typer.Exit(1)
+    if max_value is not None and value > max_value:
+        print_error(f"{label} must be at most {max_value}.")
+        raise typer.Exit(1)
+    return value
+
+
+def _prompt_int_in_range(
+    prompt: str,
+    *,
+    min_value: int | None = None,
+    max_value: int | None = None,
+    default: int | None = None,
+) -> int:
+    suffix = f" ({_range_text(min_value, max_value)})"
+    prompt_kwargs: dict[str, Any] = {"type": int, "show_default": default is not None}
+    if default is not None:
+        prompt_kwargs["default"] = default
+    value = typer.prompt(f"{prompt}{suffix}", **prompt_kwargs)
+    return _validate_int_range(value, prompt, min_value=min_value, max_value=max_value)
+
+
+def _lsp_options_limits(lsp_info: LspInfoResponse | None) -> dict[str, int | None]:
+    options = lsp_info.options if lsp_info is not None else None
+    return {
+        "min_lsp_balance_sat": getattr(options, "min_initial_lsp_balance_sat", None),
+        "max_lsp_balance_sat": getattr(options, "max_initial_lsp_balance_sat", None),
+        "min_client_balance_sat": getattr(options, "min_initial_client_balance_sat", None),
+        "max_client_balance_sat": getattr(options, "max_initial_client_balance_sat", None),
+        "min_channel_balance_sat": getattr(options, "min_channel_balance_sat", None),
+        "max_channel_balance_sat": getattr(options, "max_channel_balance_sat", None),
+        "min_required_confirmations": getattr(options, "min_required_channel_confirmations", None),
+        "min_funding_within_blocks": getattr(options, "min_funding_confirms_within_blocks", None),
+        "max_expiry_blocks": getattr(options, "max_channel_expiry_blocks", None),
+    }
+
+
+def _print_lsp_order_limits(lsp_info: LspInfoResponse) -> None:
+    limits = _lsp_options_limits(lsp_info)
+    output_model(
+        {
+            "lsp_balance_sat": _range_text(
+                limits["min_lsp_balance_sat"], limits["max_lsp_balance_sat"]
+            ),
+            "client_balance_sat": _range_text(
+                limits["min_client_balance_sat"], limits["max_client_balance_sat"]
+            ),
+            "total_channel_balance_sat": _range_text(
+                limits["min_channel_balance_sat"], limits["max_channel_balance_sat"]
+            ),
+            "required_confirmations_min": limits["min_required_confirmations"],
+            "funding_within_blocks_min": limits["min_funding_within_blocks"],
+            "expiry_blocks_max": limits["max_expiry_blocks"],
+        },
+        title="LSP Channel Limits",
+    )
+
+
+def _find_lsp_asset(lsp_info: LspInfoResponse | None, asset_id_or_ticker: str | None):
+    if lsp_info is None or not asset_id_or_ticker:
+        return None
+    normalized = asset_id_or_ticker.lower()
+    for asset in lsp_info.assets or []:
+        if (asset.asset_id or "").lower() == normalized or asset.ticker.lower() == normalized:
+            return asset
+    return None
+
+
+def _format_elapsed(seconds: float) -> str:
+    if seconds < 1:
+        return f"{seconds * 1000:.0f}ms"
+    return f"{seconds:.1f}s"
+
+
+async def _timed_step(label: str, awaitable: Awaitable[T]) -> T:
+    if not is_json_mode():
+        print_info(f"{label}...")
+    started_at = perf_counter()
+    try:
+        result = await awaitable
+    except Exception:
+        if not is_json_mode():
+            print_error(f"{label} failed after {_format_elapsed(perf_counter() - started_at)}")
+        raise
+    if not is_json_mode():
+        print_success(f"{label} finished in {_format_elapsed(perf_counter() - started_at)}")
+    return result
+
+
+def _print_lsp_asset_options(lsp_info: LspInfoResponse) -> None:
+    for idx, asset in enumerate(lsp_info.assets or [], start=1):
+        print_info(
+            f"{idx}. {asset.ticker} ({asset.name}) "
+            f"asset={asset.asset_id} "
+            f"lsp={asset.min_initial_lsp_amount}->{asset.max_initial_lsp_amount} "
+            f"client={asset.min_initial_client_amount}->{asset.max_initial_client_amount} "
+            f"channel={asset.min_channel_amount}->{asset.max_channel_amount}"
+        )
+
+
+def _prompt_lsp_asset(lsp_info: LspInfoResponse) -> str | None:
+    assets = lsp_info.assets or []
+    if not assets:
+        print_info("The LSP did not report asset-backed channel options.")
+        return _prompt_optional_text("Asset ID (rgb:...)")
+    _print_lsp_asset_options(lsp_info)
+    selected = _prompt_int_in_range(
+        "Select asset option number", min_value=1, max_value=len(assets)
+    )
+    return assets[selected - 1].asset_id
+
+
+def _validate_lsp_amounts(
+    *,
+    lsp_info: LspInfoResponse | None,
+    lsp_balance_sat: int,
+    client_balance_sat: int,
+    required_channel_confirmations: int,
+    funding_confirms_within_blocks: int,
+    channel_expiry_blocks: int,
+) -> None:
+    limits = _lsp_options_limits(lsp_info)
+    _validate_int_range(
+        lsp_balance_sat,
+        "--lsp-balance",
+        min_value=limits["min_lsp_balance_sat"],
+        max_value=limits["max_lsp_balance_sat"],
+    )
+    _validate_int_range(
+        client_balance_sat,
+        "--client-balance",
+        min_value=limits["min_client_balance_sat"],
+        max_value=limits["max_client_balance_sat"],
+    )
+    _validate_int_range(
+        lsp_balance_sat + client_balance_sat,
+        "Total channel balance",
+        min_value=limits["min_channel_balance_sat"],
+        max_value=limits["max_channel_balance_sat"],
+    )
+    _validate_int_range(
+        required_channel_confirmations,
+        "--confirmations",
+        min_value=limits["min_required_confirmations"],
+    )
+    _validate_int_range(
+        funding_confirms_within_blocks,
+        "--funding-within",
+        min_value=limits["min_funding_within_blocks"],
+    )
+    _validate_int_range(
+        channel_expiry_blocks,
+        "--expiry-blocks",
+        min_value=1,
+        max_value=limits["max_expiry_blocks"],
+    )
+
+
+def _validate_asset_amounts(
+    *,
+    lsp_asset: Any,
+    lsp_asset_amount: int | None,
+    client_asset_amount: int | None,
+) -> None:
+    if lsp_asset_amount is None:
+        print_error("--lsp-asset-amount is required when --asset-id is set.")
+        raise typer.Exit(1)
+    _validate_int_range(
+        lsp_asset_amount,
+        "--lsp-asset-amount",
+        min_value=lsp_asset.min_initial_lsp_amount,
+        max_value=lsp_asset.max_initial_lsp_amount,
+    )
+    if client_asset_amount is not None:
+        _validate_int_range(
+            client_asset_amount,
+            "--client-asset-amount",
+            min_value=lsp_asset.min_initial_client_amount,
+            max_value=min(lsp_asset.max_initial_client_amount, lsp_asset_amount),
+        )
+        if client_asset_amount > lsp_asset_amount:
+            print_error("--client-asset-amount must be less than or equal to --lsp-asset-amount.")
+            raise typer.Exit(1)
+    total_asset_amount = lsp_asset_amount + (client_asset_amount or 0)
+    _validate_int_range(
+        total_asset_amount,
+        "Total channel asset amount",
+        min_value=lsp_asset.min_channel_amount,
+        max_value=lsp_asset.max_channel_amount,
+    )
+
+
 def _normalize_optional_text(value: str | None) -> str | None:
     if value is None:
         return None
@@ -148,101 +372,139 @@ def _normalize_optional_text(value: str | None) -> str | None:
 def _resolve_channel_order_params(
     *,
     client_pubkey: str | None,
+    default_client_pubkey: str | None,
+    lsp_info: LspInfoResponse | None,
     lsp_balance_sat: int | None,
     client_balance_sat: int | None,
     required_channel_confirmations: int,
     funding_confirms_within_blocks: int,
     channel_expiry_blocks: int,
-    token: str | None,
     refund_onchain_address: str | None,
     announce_channel: bool,
     asset_id: str | None,
     lsp_asset_amount: int | None,
     client_asset_amount: int | None,
-    rfq_id: str | None,
     email: str | None,
 ) -> ChannelOrderParams:
     resolved_client_pubkey: str
     if client_pubkey is not None:
         resolved_client_pubkey = client_pubkey
+    elif default_client_pubkey is not None:
+        resolved_client_pubkey = default_client_pubkey
+        if is_interactive():
+            print_info(f"Using local node pubkey: {resolved_client_pubkey}")
     elif is_interactive():
         resolved_client_pubkey = typer.prompt("Client Lightning node public key")
     else:
         print_error("CLIENT_PUBKEY argument is required in non-interactive mode.")
         raise typer.Exit(1)
 
+    if is_interactive() and lsp_info is not None:
+        _print_lsp_order_limits(lsp_info)
+
+    limits = _lsp_options_limits(lsp_info)
     resolved_lsp_balance_sat: int
     if lsp_balance_sat is not None:
-        resolved_lsp_balance_sat = lsp_balance_sat
+        resolved_lsp_balance_sat = _validate_int_range(
+            lsp_balance_sat,
+            "--lsp-balance",
+            min_value=limits["min_lsp_balance_sat"],
+            max_value=limits["max_lsp_balance_sat"],
+        )
     elif is_interactive():
-        resolved_lsp_balance_sat = typer.prompt("LSP balance in channel (satoshis)", type=int)
+        resolved_lsp_balance_sat = _prompt_int_in_range(
+            "LSP balance in channel (satoshis)",
+            min_value=limits["min_lsp_balance_sat"],
+            max_value=limits["max_lsp_balance_sat"],
+        )
     else:
         print_error("--lsp-balance is required in non-interactive mode.")
         raise typer.Exit(1)
 
     resolved_client_balance_sat: int
     if client_balance_sat is not None:
-        resolved_client_balance_sat = client_balance_sat
+        resolved_client_balance_sat = _validate_int_range(
+            client_balance_sat,
+            "--client-balance",
+            min_value=limits["min_client_balance_sat"],
+            max_value=limits["max_client_balance_sat"],
+        )
     elif is_interactive():
-        resolved_client_balance_sat = typer.prompt("Client balance in channel (satoshis)", type=int)
+        resolved_client_balance_sat = _prompt_int_in_range(
+            "Client balance in channel (satoshis)",
+            min_value=limits["min_client_balance_sat"],
+            max_value=limits["max_client_balance_sat"],
+        )
     else:
         print_error("--client-balance is required in non-interactive mode.")
         raise typer.Exit(1)
 
     if is_interactive():
-        required_channel_confirmations = typer.prompt(
+        required_channel_confirmations = _prompt_int_in_range(
             "Required channel confirmations",
-            type=int,
+            min_value=limits["min_required_confirmations"],
             default=required_channel_confirmations,
         )
-        funding_confirms_within_blocks = typer.prompt(
+        funding_confirms_within_blocks = _prompt_int_in_range(
             "Funding confirms within blocks",
-            type=int,
+            min_value=limits["min_funding_within_blocks"],
             default=funding_confirms_within_blocks,
         )
-        channel_expiry_blocks = typer.prompt(
+        channel_expiry_blocks = _prompt_int_in_range(
             "Channel expiry blocks",
-            type=int,
+            min_value=1,
+            max_value=limits["max_expiry_blocks"],
             default=channel_expiry_blocks,
         )
 
-    resolved_token = _normalize_optional_text(token)
     resolved_refund_onchain_address = _normalize_optional_text(refund_onchain_address)
     resolved_asset_id = _normalize_optional_text(asset_id)
-    resolved_rfq_id = _normalize_optional_text(rfq_id)
     resolved_email = _normalize_optional_text(email)
 
     if is_interactive():
         if resolved_asset_id is None and typer.confirm(
             "Attach an RGB asset to the channel order?", default=False
         ):
-            resolved_asset_id = _prompt_optional_text("Asset ID (rgb:...)")
+            if lsp_info is not None:
+                resolved_asset_id = _prompt_lsp_asset(lsp_info)
+            else:
+                resolved_asset_id = _prompt_optional_text("Asset ID (rgb:...)")
 
         if resolved_asset_id is not None:
+            lsp_asset = _find_lsp_asset(lsp_info, resolved_asset_id)
+            if lsp_info is not None and lsp_asset is None:
+                print_error(f"Asset {resolved_asset_id!r} is not available from the LSP.")
+                raise typer.Exit(1)
             if lsp_asset_amount is None:
-                lsp_asset_amount = _prompt_optional_int(
-                    "[OPTIONAL] LSP RGB asset amount (Enter to skip)"
-                )
+                if lsp_asset is not None:
+                    lsp_asset_amount = _prompt_int_in_range(
+                        "LSP RGB asset amount (raw units)",
+                        min_value=lsp_asset.min_initial_lsp_amount,
+                        max_value=lsp_asset.max_initial_lsp_amount,
+                    )
+                else:
+                    lsp_asset_amount = typer.prompt("LSP RGB asset amount (raw units)", type=int)
             if client_asset_amount is None:
-                client_asset_amount = _prompt_optional_int(
-                    "[OPTIONAL] Client RGB asset amount (Enter to skip)"
-                )
+                if lsp_asset is not None:
+                    max_client_asset_amount = lsp_asset.max_initial_client_amount
+                    if lsp_asset_amount is not None:
+                        max_client_asset_amount = min(max_client_asset_amount, lsp_asset_amount)
+                    client_asset_amount = _prompt_int_in_range(
+                        "Client RGB asset amount (raw units)",
+                        min_value=lsp_asset.min_initial_client_amount,
+                        max_value=max_client_asset_amount,
+                        default=0,
+                    )
+                else:
+                    client_asset_amount = typer.prompt(
+                        "Client RGB asset amount (raw units)", type=int, default=0
+                    )
         else:
             lsp_asset_amount = None
             client_asset_amount = None
 
         announce_channel = typer.confirm("Announce channel publicly?", default=announce_channel)
 
-        if resolved_token is None:
-            resolved_token = _prompt_optional_text(
-                "[OPTIONAL] Authentication token (Enter to skip)"
-            )
-        if resolved_refund_onchain_address is None:
-            resolved_refund_onchain_address = _prompt_optional_text(
-                "[OPTIONAL] Refund onchain address (Enter to skip)"
-            )
-        if resolved_rfq_id is None:
-            resolved_rfq_id = _prompt_optional_text("[OPTIONAL] RFQ ID (Enter to skip)")
         if resolved_email is None:
             resolved_email = _prompt_optional_text("[OPTIONAL] Contact email (Enter to skip)")
 
@@ -251,6 +513,30 @@ def _resolve_channel_order_params(
     ) and resolved_asset_id is None:
         print_error("--lsp-asset-amount and --client-asset-amount require --asset-id.")
         raise typer.Exit(1)
+    if resolved_asset_id is not None:
+        lsp_asset = _find_lsp_asset(lsp_info, resolved_asset_id)
+        if lsp_info is not None and lsp_asset is None:
+            print_error(f"Asset {resolved_asset_id!r} is not available from the LSP.")
+            raise typer.Exit(1)
+        if lsp_asset is not None:
+            resolved_asset_id = lsp_asset.asset_id or resolved_asset_id
+            _validate_asset_amounts(
+                lsp_asset=lsp_asset,
+                lsp_asset_amount=lsp_asset_amount,
+                client_asset_amount=client_asset_amount,
+            )
+        elif lsp_asset_amount is None:
+            print_error("--lsp-asset-amount is required when --asset-id is set.")
+            raise typer.Exit(1)
+
+    _validate_lsp_amounts(
+        lsp_info=lsp_info,
+        lsp_balance_sat=resolved_lsp_balance_sat,
+        client_balance_sat=resolved_client_balance_sat,
+        required_channel_confirmations=required_channel_confirmations,
+        funding_confirms_within_blocks=funding_confirms_within_blocks,
+        channel_expiry_blocks=channel_expiry_blocks,
+    )
 
     return ChannelOrderParams(
         client_pubkey=resolved_client_pubkey,
@@ -259,13 +545,13 @@ def _resolve_channel_order_params(
         required_channel_confirmations=required_channel_confirmations,
         funding_confirms_within_blocks=funding_confirms_within_blocks,
         channel_expiry_blocks=channel_expiry_blocks,
-        token=resolved_token,
+        token=None,
         refund_onchain_address=resolved_refund_onchain_address,
         announce_channel=announce_channel,
         asset_id=resolved_asset_id,
         lsp_asset_amount=lsp_asset_amount,
-        client_asset_amount=client_asset_amount,
-        rfq_id=resolved_rfq_id,
+        client_asset_amount=client_asset_amount or None,
+        rfq_id=None,
         email=resolved_email,
     )
 
@@ -293,6 +579,97 @@ async def _create_channel_order(client: Any, params: ChannelOrderParams) -> Chan
     return await _submit_channel_order(client, _build_channel_order_request(params))
 
 
+def _peer_pubkey_from_connection_url(connection_url: str | None) -> str | None:
+    if not connection_url:
+        return None
+    return connection_url.split("@", 1)[0].strip() or None
+
+
+async def _ensure_lsp_peer_connected(client: Any, lsp_info: LspInfoResponse) -> None:
+    connection_url = lsp_info.lsp_connection_url
+    lsp_pubkey = _peer_pubkey_from_connection_url(connection_url)
+    if not connection_url or not lsp_pubkey:
+        print_error("LSP did not report a connection URL.")
+        raise typer.Exit(1)
+
+    peers = await _timed_step(
+        f"Checking LSP peer connection: {lsp_pubkey}",
+        client.rln.list_peers(),
+    )
+    connected_pubkeys = {peer.pubkey for peer in (peers.peers or [])}
+    if lsp_pubkey in connected_pubkeys:
+        print_info(f"Already connected to LSP peer: {lsp_pubkey}")
+        return
+    await _timed_step(
+        f"Connecting to LSP peer: {connection_url}",
+        client.rln.connect_peer(ConnectPeerRequest(peer_pubkey_and_addr=connection_url)),
+    )
+    print_success(f"LSP peer connected: {lsp_pubkey}")
+
+
+async def _autofill_refund_address(client: Any, params: ChannelOrderParams) -> None:
+    if params.refund_onchain_address:
+        return
+    address = await _timed_step("Fetching refund onchain address", client.rln.get_address())
+    params.refund_onchain_address = address.address
+    print_info(f"Using refund onchain address from local node: {params.refund_onchain_address}")
+
+
+def _quote_leg_summary(leg: Any) -> str:
+    ticker = getattr(leg, "ticker", None) or getattr(leg, "asset_id", "asset")
+    amount = getattr(leg, "amount", None)
+    if amount is None:
+        return str(ticker)
+    return f"{amount} {ticker}"
+
+
+def _quote_amount_summary(quote: Any) -> str:
+    return (
+        f"receive {_quote_leg_summary(quote.to_asset)} for {_quote_leg_summary(quote.from_asset)}"
+    )
+
+
+async def _attach_client_asset_quote(
+    client: Any,
+    params: ChannelOrderParams,
+    *,
+    yes: bool,
+) -> None:
+    if not params.asset_id or not params.client_asset_amount or params.client_asset_amount <= 0:
+        params.rfq_id = None
+        return
+
+    quote = await _timed_step(
+        "Fetching RFQ quote",
+        client.maker.get_quote(
+            PairQuoteRequest(
+                from_asset=SwapLegInput(
+                    asset_id=params.asset_id,
+                    layer=Layer.RGB_LN,
+                    amount=params.client_asset_amount,
+                ),
+                to_asset=SwapLegInput(asset_id="BTC", layer=Layer.BTC_LN, amount=None),
+            )
+        ),
+    )
+    if is_json_mode():
+        if not yes:
+            print_error("--yes is required in JSON mode to accept the RFQ price.")
+            raise typer.Exit(1)
+    else:
+        quote_summary = _quote_amount_summary(quote)
+        print_info(f"Quoted amount: {quote_summary}")
+        if is_interactive():
+            if not typer.confirm(f"Accept quoted amount ({quote_summary})?", default=False):
+                print_error("Channel order cancelled before creation.")
+                raise typer.Exit(0)
+        elif not yes:
+            print_error("--yes is required in non-interactive mode to accept the RFQ price.")
+            raise typer.Exit(1)
+    params.rfq_id = quote.rfq_id
+    print_info(f"Using RFQ ID: {params.rfq_id}")
+
+
 async def _get_channel_order(
     client: Any, order_id: str, access_token: str = ""
 ) -> ChannelOrderResponse:
@@ -300,6 +677,22 @@ async def _get_channel_order(
         client,
         OrderRequest(order_id=order_id, access_token=access_token),
     )
+
+
+def _channel_wallet_payment_summary(order: ChannelOrderResponse) -> dict[str, Any]:
+    payment = order.payment.bolt11
+    return {
+        "order_id": order.order_id,
+        "order_state": order.order_state,
+        "payment_state": payment.state,
+        "order_total_sat": payment.order_total_sat,
+        "fee_total_sat": payment.fee_total_sat,
+        "expires_at": payment.expires_at,
+    }
+
+
+def _can_pay_channel_order(order: ChannelOrderResponse) -> bool:
+    return order.payment.bolt11.state == PaymentState.EXPECT_PAYMENT
 
 
 async def _estimate_channel_order_fees(client: Any, params: ChannelOrderParams) -> ChannelFees:
@@ -581,19 +974,19 @@ async def _channel_close(channel_id: str, peer_pubkey: str, force: bool) -> None
     epilog=(
         "[bold]Examples[/bold]\n\n"
         "  Create a basic channel order:\n"
-        "  [cyan]kaleido channel order create 03abc... --lsp-balance 1000000 --client-balance 500000[/cyan]\n\n"
+        "  [cyan]kaleido channel order create --lsp-balance 1000000 --client-balance 500000[/cyan]\n\n"
         "  RGB colored channel order:\n"
-        "  [cyan]kaleido channel order create 03abc... --lsp-balance 1000000 --client-balance 500000 \\'\n"
+        "  [cyan]kaleido channel order create --lsp-balance 1000000 --client-balance 500000 \\'\n"
         "      --asset-id rgb:xyz... --lsp-asset-amount 5000 --client-asset-amount 2000[/cyan]\n\n"
         "  With custom confirmations and refund address:\n"
-        "  [cyan]kaleido channel order create 03abc... --lsp-balance 1000000 --client-balance 500000 \\'\n"
+        "  [cyan]kaleido channel order create --lsp-balance 1000000 --client-balance 500000 \\'\n"
         "      --confirmations 3 --refund-address bc1q...[/cyan]"
     ),
 )
 def channel_order_create(
     client_pubkey: Annotated[
         str | None,
-        typer.Argument(help="Client Lightning node public key."),
+        typer.Argument(help="Client Lightning node public key. Defaults to local node pubkey."),
     ] = None,
     lsp_balance_sat: Annotated[
         int | None,
@@ -621,10 +1014,12 @@ def channel_order_create(
         int,
         typer.Option("--expiry-blocks", help="Channel expiry in blocks (must be at least 1)."),
     ] = 1,
-    token: Annotated[str | None, typer.Option("--token", help="Authentication token.")] = None,
     refund_onchain_address: Annotated[
         str | None,
-        typer.Option("--refund-address", help="Bitcoin address for refunds."),
+        typer.Option(
+            "--refund-address",
+            help="Bitcoin address for refunds. Defaults to a local node address.",
+        ),
     ] = None,
     announce_channel: Annotated[
         bool,
@@ -636,48 +1031,98 @@ def channel_order_create(
     ] = None,
     lsp_asset_amount: Annotated[
         int | None,
-        typer.Option("--lsp-asset-amount", help="LSP's RGB asset amount."),
+        typer.Option(
+            "--lsp-asset-amount", help="LSP's RGB asset amount. Required with --asset-id."
+        ),
     ] = None,
     client_asset_amount: Annotated[
         int | None,
         typer.Option("--client-asset-amount", help="Client's RGB asset amount."),
     ] = None,
-    rfq_id: Annotated[
-        str | None,
-        typer.Option("--rfq-id", help="Request for quote ID."),
-    ] = None,
     email: Annotated[str | None, typer.Option("--email", help="Contact email.")] = None,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help="Accept an automatically fetched RFQ price."),
+    ] = False,
 ) -> None:
     """Create an LSP channel order."""
-    params = _resolve_channel_order_params(
-        client_pubkey=client_pubkey,
-        lsp_balance_sat=lsp_balance_sat,
-        client_balance_sat=client_balance_sat,
-        required_channel_confirmations=required_channel_confirmations,
-        funding_confirms_within_blocks=funding_confirms_within_blocks,
-        channel_expiry_blocks=channel_expiry_blocks,
-        token=token,
-        refund_onchain_address=refund_onchain_address,
-        announce_channel=announce_channel,
-        asset_id=asset_id,
-        lsp_asset_amount=lsp_asset_amount,
-        client_asset_amount=client_asset_amount,
-        rfq_id=rfq_id,
-        email=email,
+    asyncio.run(
+        _channel_order_create_flow(
+            client_pubkey=client_pubkey,
+            lsp_balance_sat=lsp_balance_sat,
+            client_balance_sat=client_balance_sat,
+            required_channel_confirmations=required_channel_confirmations,
+            funding_confirms_within_blocks=funding_confirms_within_blocks,
+            channel_expiry_blocks=channel_expiry_blocks,
+            refund_onchain_address=refund_onchain_address,
+            announce_channel=announce_channel,
+            asset_id=asset_id,
+            lsp_asset_amount=lsp_asset_amount,
+            client_asset_amount=client_asset_amount,
+            email=email,
+            yes=yes,
+        )
     )
 
-    asyncio.run(_channel_order_create(params))
 
-
-async def _channel_order_create(params) -> None:
+async def _channel_order_create_flow(
+    *,
+    client_pubkey: str | None,
+    lsp_balance_sat: int | None,
+    client_balance_sat: int | None,
+    required_channel_confirmations: int,
+    funding_confirms_within_blocks: int,
+    channel_expiry_blocks: int,
+    refund_onchain_address: str | None,
+    announce_channel: bool,
+    asset_id: str | None,
+    lsp_asset_amount: int | None,
+    client_asset_amount: int | None,
+    email: str | None,
+    yes: bool,
+) -> None:
     try:
-        client = get_client()
-        resp: ChannelOrderResponse = await _create_channel_order(client, params)
+        client = get_client(
+            require_node=True,
+            timeout=CHANNEL_ORDER_HTTP_TIMEOUT,
+            max_retries=0,
+        )
+        node_info = await _timed_step("Fetching local node info", client.rln.get_node_info())
+        lsp_info = await _timed_step("Fetching LSP info", client.maker.get_lsp_info())
+        params = _resolve_channel_order_params(
+            client_pubkey=client_pubkey,
+            default_client_pubkey=node_info.pubkey,
+            lsp_info=lsp_info,
+            lsp_balance_sat=lsp_balance_sat,
+            client_balance_sat=client_balance_sat,
+            required_channel_confirmations=required_channel_confirmations,
+            funding_confirms_within_blocks=funding_confirms_within_blocks,
+            channel_expiry_blocks=channel_expiry_blocks,
+            refund_onchain_address=refund_onchain_address,
+            announce_channel=announce_channel,
+            asset_id=asset_id,
+            lsp_asset_amount=lsp_asset_amount,
+            client_asset_amount=client_asset_amount,
+            email=email,
+        )
+        await _autofill_refund_address(client, params)
+        await _attach_client_asset_quote(client, params, yes=yes)
+        await _ensure_lsp_peer_connected(client, lsp_info)
+        resp: ChannelOrderResponse = await _timed_step(
+            "Submitting LSP channel order",
+            _create_channel_order(client, params),
+        )
         if is_json_mode():
             print_json(resp.model_dump())
         else:
             print_success(f"LSP order created: {resp.order_id}")
             output_model(resp, title="Channel Order")
+            if _can_pay_channel_order(resp):
+                print_info(
+                    f"Pay from local wallet funds with: kaleido channel order pay {resp.order_id}"
+                )
+    except typer.Exit:
+        raise
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
@@ -695,12 +1140,12 @@ def channel_order_get(
     order_id: Annotated[str | None, typer.Argument(help="LSP order ID.")] = None,
     access_token: Annotated[
         str | None,
-        typer.Option("--access-token", help="Access token returned for the order."),
+        typer.Option("--access-token", help="Optional access token returned for the order."),
     ] = None,
 ) -> None:
     """Get the status and details of an LSP channel order."""
     resolved_order_id = resolve_required_text(order_id, "LSP order ID", "ORDER_ID argument")
-    resolved_access_token = resolve_required_text(access_token, "Access token", "--access-token")
+    resolved_access_token = access_token or ""
 
     asyncio.run(_channel_order_get(resolved_order_id, resolved_access_token))
 
@@ -713,6 +1158,101 @@ async def _channel_order_get(order_id: str, access_token: str) -> None:
             print_json(resp.model_dump())
         else:
             output_model(resp, title=f"Order {order_id}")
+    except Exception as e:
+        print_error(f"Error: {e}")
+        raise typer.Exit(1)
+
+
+@order_app.command(
+    "pay",
+    epilog=(
+        "[bold]Examples[/bold]\n\n"
+        "  Pay an order from local wallet funds:\n"
+        "  [cyan]kaleido channel order pay <order-id>[/cyan]\n\n"
+        "  Non-interactive payment:\n"
+        "  [cyan]kaleido channel order pay <order-id> --yes[/cyan]"
+    ),
+)
+def channel_order_pay(
+    order_id: Annotated[str | None, typer.Argument(help="LSP order ID.")] = None,
+    access_token: Annotated[
+        str | None,
+        typer.Option("--access-token", help="Optional access token returned for the order."),
+    ] = None,
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", "-y", help="Pay the order invoice without confirmation."),
+    ] = False,
+) -> None:
+    """Pay an LSP channel order with local wallet funds."""
+    resolved_order_id = resolve_required_text(order_id, "LSP order ID", "ORDER_ID argument")
+    asyncio.run(_channel_order_pay(resolved_order_id, access_token or "", yes=yes))
+
+
+async def _channel_order_pay(order_id: str, access_token: str, *, yes: bool) -> None:
+    try:
+        client = get_client(
+            require_node=True,
+            timeout=CHANNEL_ORDER_HTTP_TIMEOUT,
+            max_retries=0,
+        )
+        order = await _timed_step(
+            f"Fetching LSP order {order_id}",
+            _get_channel_order(client, order_id, access_token),
+        )
+        if is_json_mode():
+            if not yes:
+                print_error("--yes is required in JSON mode to pay the order.")
+                raise typer.Exit(1)
+        else:
+            output_model(_channel_wallet_payment_summary(order), title="Wallet Payment")
+        if not _can_pay_channel_order(order):
+            if is_json_mode():
+                print_json(order.model_dump())
+            else:
+                print_info(
+                    "This order is not awaiting a wallet payment. Current payment state: "
+                    f"{order.payment.bolt11.state}"
+                )
+                output_model(order, title=f"Order {order_id}")
+            return
+        if is_interactive() and not yes:
+            confirmed = typer.confirm(
+                (
+                    "Pay this order from local wallet funds "
+                    f"({order.payment.bolt11.order_total_sat} sat + "
+                    f"{order.payment.bolt11.fee_total_sat} sat fee)?"
+                ),
+                default=False,
+            )
+            if not confirmed:
+                print_error("Channel order payment cancelled.")
+                raise typer.Exit(0)
+        elif not yes:
+            print_error("--yes is required in non-interactive mode to pay the order.")
+            raise typer.Exit(1)
+
+        payment_resp: SendPaymentResponse = await _timed_step(
+            "Paying order invoice from local wallet funds",
+            client.rln.send_payment(SendPaymentRequest(invoice=order.payment.bolt11.invoice)),
+        )
+        refreshed_order = await _timed_step(
+            f"Refreshing LSP order {order_id}",
+            _get_channel_order(client, order_id, access_token),
+        )
+        if is_json_mode():
+            print_json(
+                {
+                    "payment": payment_resp.model_dump(),
+                    "order": refreshed_order.model_dump(),
+                }
+            )
+        else:
+            print_success(f"Wallet payment submitted for order {order_id}")
+            output_model(payment_resp, title="Payment Result")
+            output_model(refreshed_order, title=f"Order {order_id}")
+    except typer.Exit:
+        raise
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
@@ -782,13 +1322,13 @@ async def _channel_order_decide(order_id: str, accept: bool, access_token: str) 
     epilog=(
         "[bold]Examples[/bold]\n\n"
         "  Estimate fees for a channel:\n"
-        "  [cyan]kaleido channel order estimate-fees 03abc... --lsp-balance 1000000 --client-balance 500000[/cyan]"
+        "  [cyan]kaleido channel order estimate-fees --lsp-balance 1000000 --client-balance 500000[/cyan]"
     ),
 )
 def channel_estimate_fees(
     client_pubkey: Annotated[
         str | None,
-        typer.Argument(help="Client Lightning node public key."),
+        typer.Argument(help="Client Lightning node public key. Defaults to local node pubkey."),
     ] = None,
     lsp_balance_sat: Annotated[
         int | None,
@@ -804,7 +1344,9 @@ def channel_estimate_fees(
     ] = None,
     lsp_asset_amount: Annotated[
         int | None,
-        typer.Option("--lsp-asset-amount", help="LSP's RGB asset amount."),
+        typer.Option(
+            "--lsp-asset-amount", help="LSP's RGB asset amount. Required with --asset-id."
+        ),
     ] = None,
     client_asset_amount: Annotated[
         int | None,
@@ -826,7 +1368,6 @@ def channel_estimate_fees(
         int,
         typer.Option("--expiry-blocks", help="Channel expiry in blocks (must be at least 1)."),
     ] = 1,
-    token: Annotated[str | None, typer.Option("--token", help="Authentication token.")] = None,
     refund_onchain_address: Annotated[
         str | None,
         typer.Option("--refund-address", help="Bitcoin address for refunds."),
@@ -835,41 +1376,69 @@ def channel_estimate_fees(
         bool,
         typer.Option("--announce/--private", help="Announce channel publicly."),
     ] = True,
-    rfq_id: Annotated[
-        str | None,
-        typer.Option("--rfq-id", help="Request for quote ID."),
-    ] = None,
     email: Annotated[str | None, typer.Option("--email", help="Contact email.")] = None,
 ) -> None:
     """Estimate fees for opening an LSP channel."""
-    params = _resolve_channel_order_params(
-        client_pubkey=client_pubkey,
-        lsp_balance_sat=lsp_balance_sat,
-        client_balance_sat=client_balance_sat,
-        required_channel_confirmations=required_channel_confirmations,
-        funding_confirms_within_blocks=funding_confirms_within_blocks,
-        channel_expiry_blocks=channel_expiry_blocks,
-        token=token,
-        refund_onchain_address=refund_onchain_address,
-        announce_channel=announce_channel,
-        asset_id=asset_id,
-        lsp_asset_amount=lsp_asset_amount,
-        client_asset_amount=client_asset_amount,
-        rfq_id=rfq_id,
-        email=email,
+    asyncio.run(
+        _channel_estimate_fees_flow(
+            client_pubkey=client_pubkey,
+            lsp_balance_sat=lsp_balance_sat,
+            client_balance_sat=client_balance_sat,
+            asset_id=asset_id,
+            lsp_asset_amount=lsp_asset_amount,
+            client_asset_amount=client_asset_amount,
+            required_channel_confirmations=required_channel_confirmations,
+            funding_confirms_within_blocks=funding_confirms_within_blocks,
+            channel_expiry_blocks=channel_expiry_blocks,
+            refund_onchain_address=refund_onchain_address,
+            announce_channel=announce_channel,
+            email=email,
+        )
     )
 
-    asyncio.run(_channel_estimate_fees(params))
 
-
-async def _channel_estimate_fees(params) -> None:
+async def _channel_estimate_fees_flow(
+    *,
+    client_pubkey: str | None,
+    lsp_balance_sat: int | None,
+    client_balance_sat: int | None,
+    asset_id: str | None,
+    lsp_asset_amount: int | None,
+    client_asset_amount: int | None,
+    required_channel_confirmations: int,
+    funding_confirms_within_blocks: int,
+    channel_expiry_blocks: int,
+    refund_onchain_address: str | None,
+    announce_channel: bool,
+    email: str | None,
+) -> None:
     try:
-        client = get_client()
+        client = get_client(require_node=True)
+        node_info = await client.rln.get_node_info()
+        lsp_info = await client.maker.get_lsp_info()
+        params = _resolve_channel_order_params(
+            client_pubkey=client_pubkey,
+            default_client_pubkey=node_info.pubkey,
+            lsp_info=lsp_info,
+            lsp_balance_sat=lsp_balance_sat,
+            client_balance_sat=client_balance_sat,
+            required_channel_confirmations=required_channel_confirmations,
+            funding_confirms_within_blocks=funding_confirms_within_blocks,
+            channel_expiry_blocks=channel_expiry_blocks,
+            refund_onchain_address=refund_onchain_address,
+            announce_channel=announce_channel,
+            asset_id=asset_id,
+            lsp_asset_amount=lsp_asset_amount,
+            client_asset_amount=client_asset_amount,
+            email=email,
+        )
         resp: ChannelFees = await _estimate_channel_order_fees(client, params)
         if is_json_mode():
             print_json(resp.model_dump())
         else:
             _print_channel_order_fees(resp, title="Estimated Fees")
+    except typer.Exit:
+        raise
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
