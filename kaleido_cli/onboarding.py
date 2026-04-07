@@ -9,7 +9,7 @@ from typing import Any
 import typer
 
 from .config import load_config, save_config
-from .docker_manager import DEFAULT_SPAWN_DIR, SpawnConfig, SpawnManager
+from .docker_manager import DEFAULT_SPAWN_DIR, DockerManager, SpawnConfig, SpawnManager
 from .output import print_error, print_info, print_panel, print_success
 
 
@@ -68,7 +68,7 @@ def run_setup(
 
     print_panel(
         "Kaleido Setup",
-        "Choose a market-only setup or configure a local RGB Lightning Node.\n"
+        "Set up Kaleidoswap defaults and optionally create or reuse a local RGB Lightning Node.\n"
         "Your answers are saved to ~/.kaleido/config.json.",
     )
 
@@ -139,24 +139,6 @@ def run_setup(
                 use_defaults=defaults,
             )
             env_dir = base_dir / resolved_env_name
-            if (env_dir / "docker-compose.yml").exists():
-                if defaults:
-                    print_error(
-                        f"Environment '{resolved_env_name}' already exists at {env_dir}. "
-                        "Choose a different --env-name or reuse it with 'kaleido node use'."
-                    )
-                    raise typer.Exit(1)
-                overwrite = typer.confirm(
-                    f"Environment '{resolved_env_name}' already exists at {env_dir}. Overwrite?",
-                    default=False,
-                )
-                if not overwrite:
-                    print_info("Aborted.")
-                    raise typer.Exit(0)
-
-            config.spawn_dir = str(base_dir)
-            save_config(config)
-
             manager = SpawnManager(
                 SpawnConfig(
                     name=resolved_env_name,
@@ -166,13 +148,50 @@ def run_setup(
                     spawn_base_dir=str(base_dir),
                 )
             )
-            rc = manager.spawn(start=created_env_started)
-            if rc != 0:
-                raise typer.Exit(rc)
+            if (env_dir / "docker-compose.yml").exists():
+                if defaults:
+                    existing_manager = DockerManager(str(env_dir))
+                    print_info(f"Reusing existing environment '{resolved_env_name}' at {env_dir}.")
+                    if created_env_started:
+                        if not existing_manager._validate():
+                            raise typer.Exit(1)
+                        print_info(f"Starting environment '{resolved_env_name}' …")
+                        rc = existing_manager._run(["up", "-d"])
+                        if rc != 0:
+                            raise typer.Exit(rc)
+                        print_success(f"Environment '{resolved_env_name}' is up.")
 
-            config.node_url = manager.node_urls()[0]
-            save_config(config)
-            print_success(f"Active node-url → {config.node_url}")
+                    config.spawn_dir = str(base_dir)
+                    urls = existing_manager.node_urls()
+                    if not urls:
+                        print_error(
+                            f"Could not find any node URLs in existing environment '{resolved_env_name}'."
+                        )
+                        raise typer.Exit(1)
+                    config.node_url = urls[0]
+                    save_config(config)
+                    print_success(f"Active node-url → {config.node_url}")
+                    should_create_node = False
+                else:
+                    overwrite = typer.confirm(
+                        f"Environment '{resolved_env_name}' already exists at {env_dir}. Overwrite?",
+                        default=False,
+                    )
+                    if not overwrite:
+                        print_info("Aborted.")
+                        raise typer.Exit(0)
+
+            if should_create_node:
+                config.spawn_dir = str(base_dir)
+                save_config(config)
+
+                rc = manager.spawn(start=created_env_started)
+                if rc != 0:
+                    raise typer.Exit(rc)
+
+                config.node_url = manager.node_urls()[0]
+                save_config(config)
+                print_success(f"Active node-url → {config.node_url}")
         else:
             config.node_url = _value_or_prompt(
                 node_url,
