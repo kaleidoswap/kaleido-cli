@@ -9,8 +9,8 @@ from typing import Any
 import typer
 
 from .config import load_config, save_config
-from .docker_manager import DEFAULT_SPAWN_DIR, SpawnConfig, SpawnManager
-from .output import print_error, print_info, print_panel, print_success
+from .docker_manager import COMPOSE_FILE, DEFAULT_SPAWN_DIR, SpawnConfig, SpawnManager
+from .output import is_interactive, print_error, print_info, print_panel, print_success
 
 
 class SetupMode(str, Enum):
@@ -50,6 +50,15 @@ def _confirm_or_default(
     return typer.confirm(label, default=default)
 
 
+def _next_available_env_name(base_dir: Path, env_name: str) -> str:
+    """Suggest an environment name that is available under the base directory."""
+    for suffix in range(2, 100):
+        candidate = f"{env_name}-{suffix}"
+        if not (base_dir / candidate / COMPOSE_FILE).exists():
+            return candidate
+    return f"{env_name}-new"
+
+
 def run_setup(
     *,
     mode: SetupMode | None,
@@ -68,7 +77,7 @@ def run_setup(
 
     print_panel(
         "Kaleido Setup",
-        "Choose a market-only setup or configure a local RGB Lightning Node.\n"
+        "Set up Kaleidoswap defaults and optionally create or reuse a local RGB Lightning Node.\n"
         "Your answers are saved to ~/.kaleido/config.json.",
     )
 
@@ -111,10 +120,13 @@ def run_setup(
         )
 
         if should_create_node:
+            default_base_dir = (
+                str(DEFAULT_SPAWN_DIR) if defaults else config.spawn_dir or str(DEFAULT_SPAWN_DIR)
+            )
             base_dir_input = _value_or_prompt(
                 spawn_dir,
                 "Base directory for node environments",
-                config.spawn_dir or str(DEFAULT_SPAWN_DIR),
+                default_base_dir,
                 use_defaults=defaults,
             )
             base_dir = Path(base_dir_input).expanduser().resolve()
@@ -138,41 +150,56 @@ def run_setup(
                 True,
                 use_defaults=defaults,
             )
-            env_dir = base_dir / resolved_env_name
-            if (env_dir / "docker-compose.yml").exists():
-                if defaults:
+            while (base_dir / resolved_env_name / COMPOSE_FILE).exists():
+                env_dir = base_dir / resolved_env_name
+                if not is_interactive():
                     print_error(
                         f"Environment '{resolved_env_name}' already exists at {env_dir}. "
-                        "Choose a different --env-name or reuse it with 'kaleido node use'."
+                        "Choose a different environment name with --env-name to create a new node."
                     )
                     raise typer.Exit(1)
+                use_different_path = typer.confirm(
+                    f"Environment '{resolved_env_name}' already exists at {env_dir}. "
+                    "Create the new node in a different folder under the same base directory?",
+                    default=True,
+                )
+                if use_different_path:
+                    resolved_env_name = typer.prompt(
+                        "Choose a different environment folder name",
+                        default=_next_available_env_name(base_dir, resolved_env_name),
+                    )
+                    created_env_name = resolved_env_name
+                    continue
                 overwrite = typer.confirm(
-                    f"Environment '{resolved_env_name}' already exists at {env_dir}. Overwrite?",
+                    "Overwrite only the compose file? Existing node data may still be reused.",
                     default=False,
                 )
                 if not overwrite:
                     print_info("Aborted.")
                     raise typer.Exit(0)
+                print_info(f"Overwriting compose file for '{resolved_env_name}' at {env_dir}.")
+                break
 
-            config.spawn_dir = str(base_dir)
-            save_config(config)
+            if should_create_node:
+                config.spawn_dir = str(base_dir)
+                save_config(config)
 
-            manager = SpawnManager(
-                SpawnConfig(
-                    name=resolved_env_name,
-                    count=count,
-                    network=config.network,
-                    disable_authentication=True,
-                    spawn_base_dir=str(base_dir),
+                manager = SpawnManager(
+                    SpawnConfig(
+                        name=resolved_env_name,
+                        count=count,
+                        network=config.network,
+                        disable_authentication=True,
+                        spawn_base_dir=str(base_dir),
+                    )
                 )
-            )
-            rc = manager.spawn(start=created_env_started)
-            if rc != 0:
-                raise typer.Exit(rc)
+                rc = manager.spawn(start=created_env_started)
+                if rc != 0:
+                    raise typer.Exit(rc)
 
-            config.node_url = manager.node_urls()[0]
-            save_config(config)
-            print_success(f"Active node-url → {config.node_url}")
+                config.node_url = manager.node_urls()[0]
+                save_config(config)
+                print_success(f"Active node-url → {config.node_url}")
         else:
             config.node_url = _value_or_prompt(
                 node_url,

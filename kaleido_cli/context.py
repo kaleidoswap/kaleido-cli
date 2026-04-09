@@ -18,7 +18,12 @@ class _State:
 state = _State()
 
 
-def get_client(*, require_node: bool = False) -> KaleidoClient:
+def get_client(
+    *,
+    require_node: bool = False,
+    timeout: float | None = None,
+    max_retries: int = 3,
+) -> KaleidoClient:
     """Build a KaleidoClient from current state."""
     node_url = state.node_url or state.config.node_url or None
     api_url = state.api_url or state.config.api_url
@@ -31,4 +36,6 @@ def get_client(*, require_node: bool = False) -> KaleidoClient:
     return KaleidoClient.create(
         base_url=api_url,
         node_url=node_url,
+        timeout=timeout or 30.0,
+        max_retries=max_retries,
     )

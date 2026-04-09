@@ -42,10 +42,13 @@ Then run:
 kaleido setup
 ```
 
-`kaleido setup` walks you through either:
+`kaleido setup` creates and starts one mutinynet node with defaults. You can also run:
 
-- a market-only setup that works without Docker
-- a local-node setup that creates a Docker environment for you
+```bash
+kaleido setup signetcustom
+```
+
+Use `kaleido setup --mode market --defaults` for a market-only setup that works without Docker.
 
 ### Alternative installers
 
@@ -99,8 +102,8 @@ If you want to configure manually, use:
 
 ```bash
 kaleido config show                              # view current config
-kaleido config set api-url https://api.kaleidoswap.com
-kaleido config set network signet
+kaleido config set api-url https://api.signet.kaleidoswap.com/
+kaleido config set network mutinynet
 kaleido config reset                             # reset to defaults
 ```
 
@@ -108,10 +111,10 @@ Override per-command with flags or environment variables:
 
 ```bash
 kaleido --node-url http://localhost:3001 wallet balance
-kaleido --api-url https://api.kaleidoswap.com market pairs
+kaleido --api-url https://api.signet.kaleidoswap.com/ market pairs
 
 export KALEIDO_NODE_URL=http://localhost:3001
-export KALEIDO_API_URL=https://api.kaleidoswap.com
+export KALEIDO_API_URL=https://api.signet.kaleidoswap.com/
 ```
 
 Valid config keys: `api-url`, `node-url`, `network`, `spawn-dir`
@@ -120,10 +123,11 @@ Valid config keys: `api-url`, `node-url`, `network`, `spawn-dir`
 
 ## Node Environments
 
-The CLI uses a **named environment** model. Each environment is an isolated Docker Compose setup with its own compose file and data volumes stored under a base directory (default: `~/.kaleido/spawn/`).
+The CLI uses a **named environment** model. Each environment is an isolated Docker Compose setup with its own compose file and data volumes stored under `~/.kaleido/` by default.
 
 ```
-~/.kaleido/spawn/
+~/.kaleido/
+├── config.json
 ├── mainenv/
 │   ├── docker-compose.yml
 │   └── volumes/
@@ -138,17 +142,21 @@ The CLI uses a **named environment** model. Each environment is an isolated Dock
 ### Creating an environment
 
 ```bash
+kaleido setup                       # create/start one mutinynet node with defaults
+kaleido setup signetcustom          # create/start one node on an explicit network
 kaleido node create
 # or give it a name directly:
 kaleido node create testenv
 ```
 
+`mutinynet`, `signetcustom`, and `customsignet` are accepted as aliases for the Kaleidoswap custom signet RLN network.
+
 The wizard prompts for:
 
-1. **Base directory** — where all environments are stored (saved to config as `spawn-dir`)
+1. **Base directory** — where all environments are stored (default: `~/.kaleido`, saved to config as `spawn-dir`)
 2. **Environment name** — becomes a subdirectory under the base dir
 3. **Node count** — number of RGB Lightning Nodes to spin up
-4. **Network** — `regtest`, `signet`, or `mainnet`
+4. **Network** — `mutinynet` (default), `signetcustom`/`customsignet`, `signet`, `regtest`, or `mainnet`
 5. **Node ports** — base daemon API port (3001+) and LDK peer port (9735+)
 6. **Start now** — whether to bring containers up immediately
 
@@ -179,9 +187,9 @@ kaleido node use testenv --node 2   # use node 2 of 'testenv' (port 3002)
 `kaleido node list` marks the currently active node with `●`:
 
 ```
-Environments in ~/.kaleido/spawn:
+Environments in ~/.kaleido:
 
-  testenv  →  ~/.kaleido/spawn/testenv
+  testenv  →  ~/.kaleido/testenv
     ● node 1: http://localhost:3001
     ○ node 2: http://localhost:3002
 ```
@@ -211,7 +219,7 @@ kaleido --json market pairs
 
 | Command                                   | Description                                         |
 |-------------------------------------------|-----------------------------------------------------|
-| `kaleido setup`                           | Guided first-run setup for market-only or local use |
+| `kaleido setup [network]`                 | Create/start one node, mutinynet by default         |
 | `kaleido node create [name]`              | Wizard: configure and generate a named environment  |
 | `kaleido node list`                       | List all environments with node URLs                |
 | `kaleido node use <name> [--node N]`      | Set node-url to node N in an environment            |
@@ -224,9 +232,8 @@ kaleido --json market pairs
 | `kaleido node init`                       | Initialise node wallet (once after first start)     |
 | `kaleido node unlock`                     | Unlock wallet (after every restart)                 |
 | `kaleido node lock`                       | Lock the wallet                                     |
-| `kaleido node info`                       | Show detailed node + network info                   |
-| `kaleido node taker pubkey`               | Show the node's taker public key                    |
-| `kaleido node taker whitelist <swap>`     | Whitelist a swap on the taker side                  |
+| `kaleido node info`                       | Show node info from `/nodeinfo`                     |
+| `kaleido node network`                    | Show network info from `/networkinfo`               |
 
 ### `wallet` — BTC wallet
 
@@ -287,7 +294,7 @@ kaleido market quote BTC/USDT --from-amount 100000 --from-layer BTC_LN --to-laye
 
 - `kaleido swap order ...` for maker swap-order flows on the Kaleidoswap server
 - `kaleido swap atomic ...` for atomic swaps against the Kaleidoswap maker server
-- `kaleido swap node ...` for low-level local RLN node swap flows
+- `kaleido node swap ...` for low-level local RLN node swap flows
 
 | Command                             | Description                                              |
 |-------------------------------------|----------------------------------------------------------|
@@ -299,11 +306,12 @@ kaleido market quote BTC/USDT --from-amount 100000 --from-layer BTC_LN --to-laye
 | `kaleido swap atomic init <pair>`   | Initialize an atomic swap against the maker server       |
 | `kaleido swap atomic execute`       | Execute an atomic swap against the maker server          |
 | `kaleido swap atomic status <hash>` | Check atomic swap status against the maker server        |
-| `kaleido swap node init`            | Initialize a low-level local node swap                   |
-| `kaleido swap node whitelist`       | Whitelist a swap on the local taker node                 |
-| `kaleido swap node execute`         | Execute a low-level local node swap                      |
-| `kaleido swap node status <hash>`   | Check local node swap status by payment hash             |
-| `kaleido swap node list`            | List swaps known to the local RLN node                   |
+| `kaleido node swap pubkey`          | Show the local node's taker public key                   |
+| `kaleido node swap init`            | Initialize a low-level local node swap                   |
+| `kaleido node swap whitelist`       | Whitelist a swap on the local taker node                 |
+| `kaleido node swap execute`         | Execute a low-level local node swap                      |
+| `kaleido node swap status <hash>`   | Check local node swap status by payment hash             |
+| `kaleido node swap list`            | List swaps known to the local RLN node                   |
 
 ### `config` — CLI configuration
 
@@ -322,17 +330,17 @@ kaleido market quote BTC/USDT --from-amount 100000 --from-layer BTC_LN --to-laye
 # 1. Install
 curl -fsSL https://raw.githubusercontent.com/kaleidoswap/kaleido-cli/master/install.sh | sh
 
-# 2. Run the guided setup
+# 2. Create/start one mutinynet node
 kaleido setup
 
-# 3. If you chose a local node, initialise and unlock the wallet
+# 3. Initialise and unlock the wallet
 kaleido node init
 kaleido node unlock
 
-# 4. If you chose a local node, confirm it is healthy
+# 4. Confirm the node is healthy
 kaleido node info
 
-# 5. If you chose a local node, get a funding address
+# 5. Get a funding address
 kaleido wallet address
 
 # 6. Browse available trading pairs
@@ -342,10 +350,10 @@ kaleido market pairs
 kaleido market quote BTC/USDT --from-amount 100000
 ```
 
-For a non-interactive local setup with defaults:
+For a non-interactive local setup with mutinynet defaults:
 
 ```bash
-kaleido setup --mode local --create-node --defaults
+kaleido setup
 ```
 
 ### Working with multiple nodes

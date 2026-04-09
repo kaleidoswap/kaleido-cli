@@ -7,8 +7,17 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
-from kaleido_sdk.rln import TakerRequest
 
+from kaleido_cli.commands.node_swap import node_swap_app
+from kaleido_cli.config import (
+    DEFAULT_BITCOIND_RPC_HOST,
+    DEFAULT_BITCOIND_RPC_PASSWORD,
+    DEFAULT_BITCOIND_RPC_PORT,
+    DEFAULT_BITCOIND_RPC_USERNAME,
+    DEFAULT_INDEXER_URL,
+    DEFAULT_NETWORK,
+    DEFAULT_PROXY_ENDPOINT,
+)
 from kaleido_cli.context import get_client, state
 from kaleido_cli.docker_manager import (
     DEFAULT_BASE_DAEMON_PORT,
@@ -21,11 +30,9 @@ from kaleido_cli.docker_manager import (
 )
 from kaleido_cli.output import (
     is_interactive,
-    is_json_mode,
     output_model,
     print_error,
     print_info,
-    print_json,
     print_success,
     print_warning,
 )
@@ -36,6 +43,8 @@ node_app = typer.Typer(
     help=(
         "Manage named RGB Lightning Node environments via Docker.\n\n"
         "[bold]Creating an environment:[/bold]\n"
+        "  [cyan]kaleido setup[/cyan]                — create one mutinynet node with defaults\n"
+        "  [cyan]kaleido setup <network>[/cyan]      — create one node on a specific network\n"
         "  [cyan]kaleido node create[/cyan]          — wizard: configure ports, network\n\n"
         "[bold]Managing environments:[/bold]\n"
         "  [cyan]kaleido node list[/cyan]             — list all environments with their node URLs\n"
@@ -52,24 +61,14 @@ node_app = typer.Typer(
         "  [cyan]kaleido node init[/cyan]             — initialize node wallet (once)\n"
         "  [cyan]kaleido node unlock[/cyan]           — unlock wallet after restart\n"
         "  [cyan]kaleido node shutdown[/cyan]        — gracefully shut down the node process\n"
-        "  [cyan]kaleido node info[/cyan]             — check node reachability and details\n"
+        "  [cyan]kaleido node info[/cyan]             — show node details\n"
+        "  [cyan]kaleido node network[/cyan]          — show network height/details\n"
+        "  [cyan]kaleido node swap pubkey[/cyan]      — show the local taker pubkey\n"
+        "  [cyan]kaleido node swap init[/cyan]        — run low-level local node swap flows\n"
     ),
 )
 
-taker_app = typer.Typer(
-    no_args_is_help=True,
-    rich_markup_mode="rich",
-    help="Taker-side swap operations — identity and swap acceptance.",
-)
-
-node_app.add_typer(taker_app, name="taker")
-
-DEFAULT_BITCOIND_USER = "user"
-DEFAULT_BITCOIND_PASS = "password"
-DEFAULT_BITCOIND_HOST = "regtest-bitcoind.rgbtools.org"
-DEFAULT_BITCOIND_PORT = 80
-DEFAULT_INDEXER_URL = "electrum.rgbtools.org:50041"
-DEFAULT_PROXY_ENDPOINT = "rpcs://proxy.iriswallet.com/0.2/json-rpc"
+node_app.add_typer(node_swap_app, name="swap")
 
 
 # ---------------------------------------------------------------------------
@@ -107,70 +106,6 @@ def _resolve_name(name: str | None) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Taker commands
-# ---------------------------------------------------------------------------
-
-
-@taker_app.command(
-    "pubkey",
-    epilog="  [cyan]kaleido node taker pubkey[/cyan]   Print the node's taker public key.",
-)
-def taker_pubkey() -> None:
-    """Show the node's taker public key (used in swap operations)."""
-    asyncio.run(_taker_pubkey())
-
-
-async def _taker_pubkey() -> None:
-    try:
-        client = get_client(require_node=True)
-        pubkey = await client.rln.get_taker_pubkey()
-        if is_json_mode():
-            print_json({"pubkey": pubkey})
-        else:
-            print_success(f"Taker pubkey: {pubkey}")
-    except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
-
-
-@taker_app.command(
-    "whitelist",
-    epilog=(
-        "[bold]Examples[/bold]\n\n"
-        "  Accept a swap offer from a maker:\n"
-        "  [cyan]kaleido node taker whitelist '30/rgb:abc.../10/rgb:def.../...'[/cyan]"
-    ),
-)
-def taker_whitelist(
-    swapstring: Annotated[
-        str | None,
-        typer.Argument(help="Swap string to accept on the taker side."),
-    ] = None,
-) -> None:
-    """Whitelist (accept) a swap string from a maker on the taker side."""
-    resolved: str
-    if swapstring is not None:
-        resolved = swapstring
-    elif is_interactive():
-        resolved = typer.prompt("Swapstring")
-    else:
-        print_error("SWAPSTRING argument is required in non-interactive mode.")
-        raise typer.Exit(1)
-
-    asyncio.run(_taker_whitelist(resolved))
-
-
-async def _taker_whitelist(swapstring: str) -> None:
-    try:
-        client = get_client(require_node=True)
-        await client.rln.whitelist_swap(TakerRequest(swapstring=swapstring))
-        print_success("Swap whitelisted — taker accepted this offer.")
-    except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
-
-
-# ---------------------------------------------------------------------------
 # Environment management
 # ---------------------------------------------------------------------------
 
@@ -189,7 +124,9 @@ async def _taker_whitelist(swapstring: str) -> None:
 def node_create(
     name: Annotated[
         str | None,
-        typer.Argument(help="Environment name (directory under spawn-dir). Prompted if omitted."),
+        typer.Argument(
+            help="Environment name (directory under ~/.kaleido by default). Prompted if omitted."
+        ),
     ] = None,
 ) -> None:
     """[bold]Wizard:[/bold] configure and generate a named compose environment."""
@@ -198,7 +135,7 @@ def node_create(
     print_info("\n  Kaleido Node Create Wizard")
     print_info("  " + "─" * 38)
 
-    # ── Base spawn directory ─────────────────────────────────────────────────
+    # ── Base environment directory ───────────────────────────────────────────
     default_base = str(state.config.spawn_dir or DEFAULT_SPAWN_DIR)
     spawn_base_input = typer.prompt(
         "  Base directory for environments",
@@ -208,7 +145,7 @@ def node_create(
     if str(base) != str(Path(default_base).expanduser().resolve()):
         state.config.spawn_dir = str(base)
         save_config(state.config)
-        print_info(f"  Saved spawn-dir → {base}")
+        print_info(f"  Saved environment base directory → {base}")
 
     # ── Environment name ─────────────────────────────────────────────────────
     resolved_name: str
@@ -236,7 +173,7 @@ def node_create(
     count = typer.prompt("  How many RGB Lightning Nodes?", default=1, type=int)
 
     # ── Network ──────────────────────────────────────────────────────────────
-    network = typer.prompt("  Bitcoin network", default=state.config.network or "regtest")
+    network = typer.prompt("  Bitcoin network", default=state.config.network or DEFAULT_NETWORK)
 
     # ── Node ports ───────────────────────────────────────────────────────────
     print_info("  ── Node ports ────────────────────────────────────────")
@@ -538,7 +475,7 @@ def node_clean(
 
 @node_app.command("info")
 def node_info() -> None:
-    """Display detailed node information."""
+    """Display node information from /nodeinfo."""
     asyncio.run(_node_info())
 
 
@@ -546,8 +483,22 @@ async def _node_info() -> None:
     try:
         client = get_client(require_node=True)
         info = await client.rln.get_node_info()
-        net = await client.rln.get_network_info()
         output_model(info, title="Node Info")
+    except Exception as e:
+        print_error(f"Error: {e}")
+        raise typer.Exit(1)
+
+
+@node_app.command("network")
+def node_network() -> None:
+    """Display network information from /networkinfo."""
+    asyncio.run(_node_network())
+
+
+async def _node_network() -> None:
+    try:
+        client = get_client(require_node=True)
+        net = await client.rln.get_network_info()
         output_model(net, title="Network Info")
     except Exception as e:
         print_error(f"Error: {e}")
@@ -558,7 +509,7 @@ async def _node_info() -> None:
     "init",
     epilog=(
         "[bold]Examples[/bold]\n\n"
-        "  Create a wallet password interactively:\n"
+        "  Create a new wallet password interactively:\n"
         "  [cyan]kaleido node init[/cyan]\n\n"
         "  Pass password directly:\n"
         "  [cyan]kaleido node init --password mysecret[/cyan]"
@@ -570,7 +521,7 @@ def node_init(
         typer.Option(
             "--password",
             "-p",
-            help="New wallet password. Prompted securely if omitted.",
+            help="Wallet password. Prompted securely if omitted.",
             hide_input=True,
         ),
     ] = None,
@@ -607,7 +558,7 @@ async def _node_init(password: str, mnemonic: str | None) -> None:
     "unlock",
     epilog=(
         "[bold]Examples[/bold]\n\n"
-        "  Simple unlock (uses rgbtools.org defaults):\n"
+        "  Simple unlock (uses Kaleidoswap mutinynet defaults):\n"
         "  [cyan]kaleido node unlock[/cyan]\n\n"
         "  Override bitcoind credentials:\n"
         "  [cyan]kaleido node unlock --bitcoind-user alice --bitcoind-pass hunter2[/cyan]\n\n"
@@ -638,19 +589,19 @@ def node_unlock(
             help="bitcoind RPC password.",
             hide_input=True,
         ),
-    ] = DEFAULT_BITCOIND_PASS,
+    ] = DEFAULT_BITCOIND_RPC_PASSWORD,
     bitcoind_user: Annotated[
         str,
         typer.Option("--bitcoind-user", help="bitcoind RPC username."),
-    ] = DEFAULT_BITCOIND_USER,
+    ] = DEFAULT_BITCOIND_RPC_USERNAME,
     bitcoind_host: Annotated[
         str,
         typer.Option("--bitcoind-host", help="bitcoind RPC host."),
-    ] = DEFAULT_BITCOIND_HOST,
+    ] = DEFAULT_BITCOIND_RPC_HOST,
     bitcoind_port: Annotated[
         int,
         typer.Option("--bitcoind-port", help="bitcoind RPC port."),
-    ] = DEFAULT_BITCOIND_PORT,
+    ] = DEFAULT_BITCOIND_RPC_PORT,
     indexer_url: Annotated[
         str,
         typer.Option("--indexer-url", help="Electrs indexer URL."),
@@ -680,7 +631,7 @@ def node_unlock(
 
     if is_interactive():
         use_defaults = typer.confirm(
-            "Use default rgbtools.org services (bitcoind, indexer, proxy)?", default=True
+            "Use default Kaleidoswap mutinynet services (bitcoind, indexer, proxy)?", default=True
         )
         if not use_defaults:
             bitcoind_user = typer.prompt("bitcoind RPC username", default=bitcoind_user)
@@ -692,10 +643,10 @@ def node_unlock(
             indexer_url = typer.prompt("Electrs indexer URL", default=indexer_url)
             proxy_endpoint = typer.prompt("RGB proxy endpoint", default=proxy_endpoint)
         else:
-            bitcoind_user = DEFAULT_BITCOIND_USER
-            bitcoind_pass = DEFAULT_BITCOIND_PASS
-            bitcoind_host = DEFAULT_BITCOIND_HOST
-            bitcoind_port = DEFAULT_BITCOIND_PORT
+            bitcoind_user = DEFAULT_BITCOIND_RPC_USERNAME
+            bitcoind_pass = DEFAULT_BITCOIND_RPC_PASSWORD
+            bitcoind_host = DEFAULT_BITCOIND_RPC_HOST
+            bitcoind_port = DEFAULT_BITCOIND_RPC_PORT
             indexer_url = DEFAULT_INDEXER_URL
             proxy_endpoint = DEFAULT_PROXY_ENDPOINT
         raw = typer.prompt("[OPTIONAL] Lightning announce alias (Enter to skip)", default="")
