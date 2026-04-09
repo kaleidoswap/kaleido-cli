@@ -1,6 +1,14 @@
 # Kaleido CLI
 
-A command-line interface for managing RGB Lightning Nodes and interacting with the [Kaleidoswap](https://kaleidoswap.com) protocol.
+[![PyPI](https://img.shields.io/pypi/v/kaleido-cli)](https://pypi.org/project/kaleido-cli/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+
+Manage RGB Lightning Nodes and trade on [Kaleidoswap](https://kaleidoswap.com) — all from your terminal.
+
+> **Beta Software — Use at Your Own Risk**
+>
+> This CLI is under active development and currently intended for **testnet/signet use only**. It is **not considered safe for mainnet** or production environments. The authors assume no responsibility for any loss of funds or damages arising from the use of this software.
 
 ## Overview
 
