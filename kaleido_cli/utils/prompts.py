@@ -8,6 +8,14 @@ from kaleido_sdk import parse_raw_amount
 from kaleido_cli.output import is_interactive, print_error
 
 
+def resolve_optional_text(value: str | None, prompt: str, default: str = "") -> str:
+    if value is not None:
+        return value
+    if is_interactive():
+        return typer.prompt(prompt, default=default)
+    return default
+
+
 def resolve_required_text(value: str | None, prompt: str, option_name: str) -> str:
     if value is not None:
         return value

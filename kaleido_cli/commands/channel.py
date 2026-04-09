@@ -49,15 +49,7 @@ from kaleido_cli.utils.channel_orders import (
     _resolve_channel_order_params,
     _timed_step,
 )
-from kaleido_cli.utils.prompts import resolve_required_text
-
-
-def _resolve_optional_access_token(access_token: str | None) -> str:
-    if access_token is not None:
-        return access_token
-    if is_interactive():
-        return typer.prompt("Access token", default="")
-    return ""
+from kaleido_cli.utils.prompts import resolve_optional_text, resolve_required_text
 
 
 def _access_token_args(access_token: str | None) -> str:
@@ -534,7 +526,7 @@ def channel_order_get(
 ) -> None:
     """Get the status and details of an LSP channel order."""
     resolved_order_id = resolve_required_text(order_id, "LSP order ID", "ORDER_ID argument")
-    resolved_access_token = _resolve_optional_access_token(access_token)
+    resolved_access_token = resolve_optional_text(access_token, "Access token")
 
     asyncio.run(_channel_order_get(resolved_order_id, resolved_access_token))
 
@@ -575,7 +567,7 @@ def channel_order_pay(
 ) -> None:
     """Pay an LSP channel order with local wallet funds."""
     resolved_order_id = resolve_required_text(order_id, "LSP order ID", "ORDER_ID argument")
-    resolved_access_token = _resolve_optional_access_token(access_token)
+    resolved_access_token = resolve_optional_text(access_token, "Access token")
     asyncio.run(_channel_order_pay(resolved_order_id, resolved_access_token, yes=yes))
 
 
@@ -684,7 +676,7 @@ def channel_order_decide(
         print_error("Must specify exactly one of --accept or --reject")
         raise typer.Exit(1)
 
-    resolved_access_token = _resolve_optional_access_token(access_token)
+    resolved_access_token = resolve_optional_text(access_token, "Access token")
 
     asyncio.run(_channel_order_decide(resolved_order_id, accept, resolved_access_token))
 
