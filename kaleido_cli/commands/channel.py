@@ -7,7 +7,6 @@ from typing import Annotated
 
 import typer
 from kaleido_sdk import (
-    ChannelFees,
     ChannelOrderResponse,
     LspInfoResponse,
     NetworkInfoResponse,
@@ -46,6 +45,7 @@ from kaleido_cli.utils.channel_orders import (
     _get_channel_order,
     _print_channel_order_fees,
     _print_lsp_info,
+    _resolve_channel_fee_estimate_params,
     _resolve_channel_order_params,
     _timed_step,
 )
@@ -690,14 +690,13 @@ async def _channel_order_decide(order_id: str, accept: bool, access_token: str) 
     epilog=(
         "[bold]Examples[/bold]\n\n"
         "  Estimate fees for a channel:\n"
-        "  [cyan]kaleido channel order estimate-fees --lsp-balance 1000000 --client-balance 500000[/cyan]"
+        "  [cyan]kaleido channel order estimate-fees --lsp-balance 1000000 --client-balance 500000[/cyan]\n\n"
+        "  Estimate fees for an RGB-backed channel:\n"
+        "  [cyan]kaleido channel order estimate-fees --lsp-balance 1000000 --client-balance 500000 \\\n"
+        "      --asset-id rgb:xyz... --lsp-asset-amount 5000 --client-asset-amount 2000[/cyan]"
     ),
 )
 def channel_estimate_fees(
-    client_pubkey: Annotated[
-        str | None,
-        typer.Argument(help="Client Lightning node public key. Defaults to local node pubkey."),
-    ] = None,
     lsp_balance_sat: Annotated[
         int | None,
         typer.Option("--lsp-balance", help="LSP's balance in the channel (satoshis)."),
@@ -720,87 +719,35 @@ def channel_estimate_fees(
         int | None,
         typer.Option("--client-asset-amount", help="Client's RGB asset amount."),
     ] = None,
-    required_channel_confirmations: Annotated[
-        int,
-        typer.Option(
-            "--confirmations", help="Required confirmations before channel is considered open."
-        ),
-    ] = 6,
-    funding_confirms_within_blocks: Annotated[
-        int,
-        typer.Option(
-            "--funding-within", help="Number of blocks within which funding must confirm."
-        ),
-    ] = 144,
     channel_expiry_blocks: Annotated[
         int,
         typer.Option("--expiry-blocks", help="Channel expiry in blocks (must be at least 1)."),
     ] = 1,
-    refund_onchain_address: Annotated[
+    token: Annotated[str | None, typer.Option("--token", help="Authentication token.")] = None,
+    rfq_id: Annotated[
         str | None,
-        typer.Option("--refund-address", help="Bitcoin address for refunds."),
+        typer.Option("--rfq-id", help="Request for quote ID."),
     ] = None,
-    announce_channel: Annotated[
-        bool,
-        typer.Option("--announce/--private", help="Announce channel publicly."),
-    ] = True,
-    email: Annotated[str | None, typer.Option("--email", help="Contact email.")] = None,
 ) -> None:
     """Estimate fees for opening an LSP channel."""
-    asyncio.run(
-        _channel_estimate_fees_flow(
-            client_pubkey=client_pubkey,
-            lsp_balance_sat=lsp_balance_sat,
-            client_balance_sat=client_balance_sat,
-            asset_id=asset_id,
-            lsp_asset_amount=lsp_asset_amount,
-            client_asset_amount=client_asset_amount,
-            required_channel_confirmations=required_channel_confirmations,
-            funding_confirms_within_blocks=funding_confirms_within_blocks,
-            channel_expiry_blocks=channel_expiry_blocks,
-            refund_onchain_address=refund_onchain_address,
-            announce_channel=announce_channel,
-            email=email,
-        )
+    params = _resolve_channel_fee_estimate_params(
+        lsp_balance_sat=lsp_balance_sat,
+        client_balance_sat=client_balance_sat,
+        channel_expiry_blocks=channel_expiry_blocks,
+        token=token,
+        asset_id=asset_id,
+        lsp_asset_amount=lsp_asset_amount,
+        client_asset_amount=client_asset_amount,
+        rfq_id=rfq_id,
     )
 
+    asyncio.run(_channel_estimate_fees_flow(params))
 
-async def _channel_estimate_fees_flow(
-    *,
-    client_pubkey: str | None,
-    lsp_balance_sat: int | None,
-    client_balance_sat: int | None,
-    asset_id: str | None,
-    lsp_asset_amount: int | None,
-    client_asset_amount: int | None,
-    required_channel_confirmations: int,
-    funding_confirms_within_blocks: int,
-    channel_expiry_blocks: int,
-    refund_onchain_address: str | None,
-    announce_channel: bool,
-    email: str | None,
-) -> None:
+
+async def _channel_estimate_fees_flow(params) -> None:
     try:
-        client = get_client(require_node=True)
-        node_info = await client.rln.get_node_info()
-        lsp_info = await client.maker.get_lsp_info()
-        params = _resolve_channel_order_params(
-            client_pubkey=client_pubkey,
-            default_client_pubkey=node_info.pubkey,
-            lsp_info=lsp_info,
-            lsp_balance_sat=lsp_balance_sat,
-            client_balance_sat=client_balance_sat,
-            required_channel_confirmations=required_channel_confirmations,
-            funding_confirms_within_blocks=funding_confirms_within_blocks,
-            channel_expiry_blocks=channel_expiry_blocks,
-            refund_onchain_address=refund_onchain_address,
-            announce_channel=announce_channel,
-            asset_id=asset_id,
-            lsp_asset_amount=lsp_asset_amount,
-            client_asset_amount=client_asset_amount,
-            email=email,
-        )
-        resp: ChannelFees = await _estimate_channel_order_fees(client, params)
+        client = get_client()
+        resp = await _estimate_channel_order_fees(client, params)
         if is_json_mode():
             print_json(resp.model_dump())
         else:
