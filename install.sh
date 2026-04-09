@@ -4,7 +4,7 @@ set -eu
 
 PACKAGE_NAME="kaleido-cli"
 ARCHIVE_REPO="https://github.com/kaleidoswap/kaleido-cli/archive/refs/heads"
-INSTALL_REF="${KALEIDO_INSTALL_REF:-main}"
+INSTALL_REF="${KALEIDO_INSTALL_REF:-master}"
 
 say() {
     printf '==> %s\n' "$*"
