@@ -116,6 +116,7 @@ def mock_client(mocker):
         "kaleido_cli.commands.market.get_client",
         "kaleido_cli.commands.wallet.get_client",
         "kaleido_cli.commands.swap.get_client",
+        "kaleido_cli.commands.node_swap.get_client",
         "kaleido_cli.commands.asset.get_client",
         "kaleido_cli.commands.channel.get_client",
         "kaleido_cli.commands.node.get_client",

@@ -15,11 +15,13 @@ def _pair(base_ticker="BTC", quote_ticker="USDT"):
     p = MagicMock()
     p.base = MagicMock(
         ticker=base_ticker,
+        asset_id="BTC" if base_ticker.upper() == "BTC" else f"rgb:{base_ticker.lower()}",
         protocol_ids={"RGB": f"rgb:{base_ticker.lower()}"},
         precision=8,
     )
     p.quote = MagicMock(
         ticker=quote_ticker,
+        asset_id="BTC" if quote_ticker.upper() == "BTC" else f"rgb:{quote_ticker.lower()}",
         protocol_ids={"RGB": f"rgb:{quote_ticker.lower()}"},
         precision=6,
     )
@@ -183,7 +185,7 @@ def test_swap_status(runner, mock_client):
 
 
 # ---------------------------------------------------------------------------
-# swap node-swaps
+# node swap list
 # ---------------------------------------------------------------------------
 
 
@@ -198,7 +200,7 @@ def test_swap_node_swaps_table(runner, mock_client):
     resp.model_dump.return_value = {}
     mock_client.rln.list_swaps.return_value = resp
 
-    result = runner.invoke(app, ["swap", "node", "list"])
+    result = runner.invoke(app, ["node", "swap", "list"])
     assert result.exit_code == 0
 
 
@@ -208,7 +210,7 @@ def test_swap_node_swaps_empty(runner, mock_client):
     resp.maker = []
     mock_client.rln.list_swaps.return_value = resp
 
-    result = runner.invoke(app, ["swap", "node", "list"])
+    result = runner.invoke(app, ["node", "swap", "list"])
     assert result.exit_code == 0
 
 

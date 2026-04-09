@@ -11,11 +11,12 @@ from kaleido_cli.app import app
 # ---------------------------------------------------------------------------
 
 
-def _asset(ticker="BTC", name="Bitcoin", protocol_ids=None, precision=8):
+def _asset(ticker="BTC", name="Bitcoin", protocol_ids=None, precision=8, asset_id=None):
     m = MagicMock()
     m.ticker = ticker
     m.name = name
     m.protocol_ids = protocol_ids or {"RGB": f"rgb:{ticker.lower()}"}
+    m.asset_id = asset_id or ("BTC" if ticker.upper() == "BTC" else f"rgb:{ticker.lower()}")
     m.precision = precision
     return m
 
