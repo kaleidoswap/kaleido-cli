@@ -706,12 +706,12 @@ async def _attach_client_asset_quote(
         "Fetching RFQ quote",
         client.maker.get_quote(
             PairQuoteRequest(
-                from_asset=SwapLegInput(
+                from_asset=SwapLegInput(asset_id="BTC", layer=Layer.BTC_LN, amount=None),
+                to_asset=SwapLegInput(
                     asset_id=params.asset_id,
                     layer=Layer.RGB_LN,
                     amount=params.client_asset_amount,
                 ),
-                to_asset=SwapLegInput(asset_id="BTC", layer=Layer.BTC_LN, amount=None),
             )
         ),
     )

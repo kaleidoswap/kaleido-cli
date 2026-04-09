@@ -51,6 +51,21 @@ from kaleido_cli.utils.channel_orders import (
 )
 from kaleido_cli.utils.prompts import resolve_required_text
 
+
+def _resolve_optional_access_token(access_token: str | None) -> str:
+    if access_token is not None:
+        return access_token
+    if is_interactive():
+        return typer.prompt("Access token", default="")
+    return ""
+
+
+def _access_token_args(access_token: str | None) -> str:
+    if not access_token:
+        return ""
+    return f" --access-token {access_token}"
+
+
 channel_app = typer.Typer(
     no_args_is_help=True,
     rich_markup_mode="rich",
@@ -485,9 +500,15 @@ async def _channel_order_create_flow(
         else:
             print_success(f"LSP order created: {resp.order_id}")
             output_model(resp, title="Channel Order")
+            access_token_args = _access_token_args(resp.access_token)
+            print_info(
+                "Inspect the order with: "
+                f"kaleido channel order get {resp.order_id}{access_token_args}"
+            )
             if _can_pay_channel_order(resp):
                 print_info(
-                    f"Pay from local wallet funds with: kaleido channel order pay {resp.order_id}"
+                    "Pay from local wallet funds with: "
+                    f"kaleido channel order pay {resp.order_id}{access_token_args}"
                 )
     except typer.Exit:
         raise
@@ -501,7 +522,7 @@ async def _channel_order_create_flow(
     epilog=(
         "[bold]Examples[/bold]\n\n"
         "  Get order status:\n"
-        "  [cyan]kaleido channel order get <order-id>[/cyan]"
+        "  [cyan]kaleido channel order get <order-id> --access-token <token>[/cyan]"
     ),
 )
 def channel_order_get(
@@ -513,7 +534,7 @@ def channel_order_get(
 ) -> None:
     """Get the status and details of an LSP channel order."""
     resolved_order_id = resolve_required_text(order_id, "LSP order ID", "ORDER_ID argument")
-    resolved_access_token = access_token or ""
+    resolved_access_token = _resolve_optional_access_token(access_token)
 
     asyncio.run(_channel_order_get(resolved_order_id, resolved_access_token))
 
@@ -536,9 +557,9 @@ async def _channel_order_get(order_id: str, access_token: str) -> None:
     epilog=(
         "[bold]Examples[/bold]\n\n"
         "  Pay an order from local wallet funds:\n"
-        "  [cyan]kaleido channel order pay <order-id>[/cyan]\n\n"
+        "  [cyan]kaleido channel order pay <order-id> --access-token <token>[/cyan]\n\n"
         "  Non-interactive payment:\n"
-        "  [cyan]kaleido channel order pay <order-id> --yes[/cyan]"
+        "  [cyan]kaleido channel order pay <order-id> --access-token <token> --yes[/cyan]"
     ),
 )
 def channel_order_pay(
@@ -554,7 +575,8 @@ def channel_order_pay(
 ) -> None:
     """Pay an LSP channel order with local wallet funds."""
     resolved_order_id = resolve_required_text(order_id, "LSP order ID", "ORDER_ID argument")
-    asyncio.run(_channel_order_pay(resolved_order_id, access_token or "", yes=yes))
+    resolved_access_token = _resolve_optional_access_token(access_token)
+    asyncio.run(_channel_order_pay(resolved_order_id, resolved_access_token, yes=yes))
 
 
 async def _channel_order_pay(order_id: str, access_token: str, *, yes: bool) -> None:
@@ -631,9 +653,9 @@ async def _channel_order_pay(order_id: str, access_token: str, *, yes: bool) -> 
     epilog=(
         "[bold]Examples[/bold]\n\n"
         "  Accept an order:\n"
-        "  [cyan]kaleido channel order decide <order-id> --accept[/cyan]\n\n"
+        "  [cyan]kaleido channel order decide <order-id> --access-token <token> --accept[/cyan]\n\n"
         "  Reject an order:\n"
-        "  [cyan]kaleido channel order decide <order-id> --reject[/cyan]"
+        "  [cyan]kaleido channel order decide <order-id> --access-token <token> --reject[/cyan]"
     ),
 )
 def channel_order_decide(
@@ -662,7 +684,9 @@ def channel_order_decide(
         print_error("Must specify exactly one of --accept or --reject")
         raise typer.Exit(1)
 
-    asyncio.run(_channel_order_decide(resolved_order_id, accept, access_token))
+    resolved_access_token = _resolve_optional_access_token(access_token)
+
+    asyncio.run(_channel_order_decide(resolved_order_id, accept, resolved_access_token))
 
 
 async def _channel_order_decide(order_id: str, accept: bool, access_token: str) -> None:
