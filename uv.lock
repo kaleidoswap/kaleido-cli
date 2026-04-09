@@ -180,9 +180,16 @@ dev = [
     { name = "pytest-asyncio" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-mock" },
+]
+
 [package.metadata]
 requires-dist = [
-    { name = "kaleido-sdk", specifier = "==0.1.3" },
+    { name = "kaleido-sdk", specifier = "==0.1.5" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "pyyaml", specifier = ">=6.0.0" },
@@ -192,18 +199,25 @@ requires-dist = [
 ]
 provides-extras = ["dev"]
 
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=9.0.2" },
+    { name = "pytest-asyncio", specifier = ">=1.3.0" },
+    { name = "pytest-mock", specifier = ">=3.15.1" },
+]
+
 [[package]]
 name = "kaleido-sdk"
-version = "0.1.3"
+version = "0.1.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic", extra = ["email"] },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f5/84/3d7bad2141a486f34553fcff5462246ad9e7dd7ff57823a3b9549163245c/kaleido_sdk-0.1.3.tar.gz", hash = "sha256:26e3e816d92144219cbe66bd88a20ef2f0eb43ec302c773017efaf9439134746", size = 119639, upload-time = "2026-04-07T13:13:09.084462Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/57/a1/87b8bc7435d8cac7c0228bc463ce303062df2146a0b0405764401318572f/kaleido_sdk-0.1.5.tar.gz", hash = "sha256:6d79d62679ac5975f0042e42ea7a4f3e63589e403848d2adba7faafc79fb68d5", size = 119649, upload-time = "2026-04-08T18:53:34.303Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6a/a6/b6ee9495f3326ba85fe77740d5f031f6b04f5dda42b90f09d193bc38e312/kaleido_sdk-0.1.3-py3-none-any.whl", hash = "sha256:df79a0edb7bdeb7e720f07b450eab1f46adf4e6802ad6b5792fdb92c381e9904", size = 46893, upload-time = "2026-04-07T13:13:08.034370Z" },
+    { url = "https://files.pythonhosted.org/packages/c9/5e/f50b2e0ca429c3b2fbd31b7cd3463d1110bf5b3b806f48e15d5557c38304/kaleido_sdk-0.1.5-py3-none-any.whl", hash = "sha256:efb003e33ca0c196e643ed5d350467d9eb1fced00f4317c8a845d78112f1fc0d", size = 46908, upload-time = "2026-04-08T18:53:33.238Z" },
 ]
 
 [[package]]
@@ -422,6 +436,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/90/2c/8af215c0f776415f3590cac4f9086ccefd6fd463befeae41cd4d3f193e5a/pytest_asyncio-1.3.0.tar.gz", hash = "sha256:d7f52f36d231b80ee124cd216ffb19369aa168fc10095013c6b014a34d3ee9e5", size = 50087, upload-time = "2025-11-10T16:07:47.256Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e5/35/f8b19922b6a25bc0880171a2f1a003eaeb93657475193ab516fd87cac9da/pytest_asyncio-1.3.0-py3-none-any.whl", hash = "sha256:611e26147c7f77640e6d0a92a38ed17c3e9848063698d5c93d5aa7aa11cebff5", size = 15075, upload-time = "2025-11-10T16:07:45.537Z" },
+]
+
+[[package]]
+name = "pytest-mock"
+version = "3.15.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/68/14/eb014d26be205d38ad5ad20d9a80f7d201472e08167f0bb4361e251084a9/pytest_mock-3.15.1.tar.gz", hash = "sha256:1849a238f6f396da19762269de72cb1814ab44416fa73a8686deac10b0d87a0f", size = 34036, upload-time = "2025-09-16T16:37:27.081Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5a/cc/06253936f4a7fa2e0f48dfe6d851d9c56df896a9ab09ac019d70b760619c/pytest_mock-3.15.1-py3-none-any.whl", hash = "sha256:0a25e2eb88fe5168d535041d09a4529a188176ae608a6d249ee65abc0949630d", size = 10095, upload-time = "2025-09-16T16:37:25.734Z" },
 ]
 
 [[package]]
