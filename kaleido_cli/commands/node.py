@@ -8,6 +8,7 @@ from typing import Annotated
 
 import typer
 
+from kaleido_cli.commands.node_swap import node_swap_app
 from kaleido_cli.config import (
     DEFAULT_BITCOIND_RPC_HOST,
     DEFAULT_BITCOIND_RPC_PASSWORD,
@@ -62,8 +63,12 @@ node_app = typer.Typer(
         "  [cyan]kaleido node shutdown[/cyan]        — gracefully shut down the node process\n"
         "  [cyan]kaleido node info[/cyan]             — show node details\n"
         "  [cyan]kaleido node network[/cyan]          — show network height/details\n"
+        "  [cyan]kaleido node swap pubkey[/cyan]      — show the local taker pubkey\n"
+        "  [cyan]kaleido node swap init[/cyan]        — run low-level local node swap flows\n"
     ),
 )
+
+node_app.add_typer(node_swap_app, name="swap")
 
 
 # ---------------------------------------------------------------------------
