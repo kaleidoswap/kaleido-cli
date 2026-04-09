@@ -18,8 +18,8 @@ from kaleido_sdk.rln import (
     ListChannelsResponse,
     OpenChannelRequest,
     OpenChannelResponse,
+    SendBtcRequest,
     SendPaymentRequest,
-    SendPaymentResponse,
 )
 
 from kaleido_cli.context import get_client
@@ -50,6 +50,21 @@ from kaleido_cli.utils.channel_orders import (
     _timed_step,
 )
 from kaleido_cli.utils.prompts import resolve_optional_text, resolve_required_text
+
+
+def _resolve_channel_order_payment_method(onchain: bool, offchain: bool) -> str:
+    if is_interactive() and not onchain and not offchain:
+        choice = typer.prompt(
+            "Pay with [O]nchain funds or [L]ightning/off-chain funds?",
+            default="L",
+        )
+        return "onchain" if choice.strip().upper().startswith("O") else "offchain"
+
+    if onchain == offchain:
+        print_error("Specify exactly one of --onchain or --offchain in non-interactive mode.")
+        raise typer.Exit(1)
+
+    return "onchain" if onchain else "offchain"
 
 
 def _access_token_args(access_token: str | None) -> str:
@@ -548,10 +563,12 @@ async def _channel_order_get(order_id: str, access_token: str) -> None:
     "pay",
     epilog=(
         "[bold]Examples[/bold]\n\n"
-        "  Pay an order from local wallet funds:\n"
-        "  [cyan]kaleido channel order pay <order-id> --access-token <token>[/cyan]\n\n"
+        "  Pay an order with onchain BTC from the local wallet:\n"
+        "  [cyan]kaleido channel order pay <order-id> --access-token <token> --onchain[/cyan]\n\n"
+        "  Pay an order with the Lightning invoice from the local wallet:\n"
+        "  [cyan]kaleido channel order pay <order-id> --access-token <token> --offchain[/cyan]\n\n"
         "  Non-interactive payment:\n"
-        "  [cyan]kaleido channel order pay <order-id> --access-token <token> --yes[/cyan]"
+        "  [cyan]kaleido channel order pay <order-id> --access-token <token> --onchain --yes[/cyan]"
     ),
 )
 def channel_order_pay(
@@ -560,6 +577,20 @@ def channel_order_pay(
         str | None,
         typer.Option("--access-token", help="Optional access token returned for the order."),
     ] = None,
+    onchain: Annotated[
+        bool,
+        typer.Option("--onchain", help="Pay the order using onchain BTC from the local wallet."),
+    ] = False,
+    offchain: Annotated[
+        bool,
+        typer.Option(
+            "--offchain", help="Pay the order using the Lightning invoice from the local wallet."
+        ),
+    ] = False,
+    fee_rate: Annotated[
+        int,
+        typer.Option("--fee-rate", help="Onchain fee rate in sat/vbyte when using --onchain."),
+    ] = 1,
     yes: Annotated[
         bool,
         typer.Option("--yes", "-y", help="Pay the order invoice without confirmation."),
@@ -568,10 +599,26 @@ def channel_order_pay(
     """Pay an LSP channel order with local wallet funds."""
     resolved_order_id = resolve_required_text(order_id, "LSP order ID", "ORDER_ID argument")
     resolved_access_token = resolve_optional_text(access_token, "Access token")
-    asyncio.run(_channel_order_pay(resolved_order_id, resolved_access_token, yes=yes))
+    payment_method = _resolve_channel_order_payment_method(onchain, offchain)
+    asyncio.run(
+        _channel_order_pay(
+            resolved_order_id,
+            resolved_access_token,
+            payment_method=payment_method,
+            fee_rate=fee_rate,
+            yes=yes,
+        )
+    )
 
 
-async def _channel_order_pay(order_id: str, access_token: str, *, yes: bool) -> None:
+async def _channel_order_pay(
+    order_id: str,
+    access_token: str,
+    *,
+    payment_method: str,
+    fee_rate: int,
+    yes: bool,
+) -> None:
     try:
         client = get_client(
             require_node=True,
@@ -599,14 +646,24 @@ async def _channel_order_pay(order_id: str, access_token: str, *, yes: bool) -> 
                 output_model(order, title=f"Order {order_id}")
             return
         if is_interactive() and not yes:
-            confirmed = typer.confirm(
-                (
-                    "Pay this order from local wallet funds "
-                    f"({order.payment.bolt11.order_total_sat} sat + "
-                    f"{order.payment.bolt11.fee_total_sat} sat fee)?"
-                ),
-                default=False,
-            )
+            if payment_method == "onchain":
+                confirmed = typer.confirm(
+                    (
+                        "Pay this order with onchain BTC "
+                        f"({order.payment.onchain.order_total_sat} sat to "
+                        f"{order.payment.onchain.address})?"
+                    ),
+                    default=False,
+                )
+            else:
+                confirmed = typer.confirm(
+                    (
+                        "Pay this order from local wallet Lightning funds "
+                        f"({order.payment.bolt11.order_total_sat} sat + "
+                        f"{order.payment.bolt11.fee_total_sat} sat fee)?"
+                    ),
+                    default=False,
+                )
             if not confirmed:
                 print_error("Channel order payment cancelled.")
                 raise typer.Exit(0)
@@ -614,10 +671,23 @@ async def _channel_order_pay(order_id: str, access_token: str, *, yes: bool) -> 
             print_error("--yes is required in non-interactive mode to pay the order.")
             raise typer.Exit(1)
 
-        payment_resp: SendPaymentResponse = await _timed_step(
-            "Paying order invoice from local wallet funds",
-            client.rln.send_payment(SendPaymentRequest(invoice=order.payment.bolt11.invoice)),
-        )
+        if payment_method == "onchain":
+            payment_result = await _timed_step(
+                "Sending onchain BTC for order",
+                client.rln.send_btc(
+                    SendBtcRequest(
+                        amount=order.payment.onchain.order_total_sat,
+                        address=order.payment.onchain.address,
+                        fee_rate=fee_rate,
+                        skip_sync=False,
+                    )
+                ),
+            )
+        else:
+            payment_result = await _timed_step(
+                "Paying order invoice from local wallet funds",
+                client.rln.send_payment(SendPaymentRequest(invoice=order.payment.bolt11.invoice)),
+            )
         refreshed_order = await _timed_step(
             f"Refreshing LSP order {order_id}",
             _get_channel_order(client, order_id, access_token),
@@ -625,13 +695,15 @@ async def _channel_order_pay(order_id: str, access_token: str, *, yes: bool) -> 
         if is_json_mode():
             print_json(
                 {
-                    "payment": payment_resp.model_dump(),
+                    "payment": payment_result.model_dump(),
                     "order": refreshed_order.model_dump(),
                 }
             )
         else:
-            print_success(f"Wallet payment submitted for order {order_id}")
-            output_model(payment_resp, title="Payment Result")
+            print_success(
+                f"{'Onchain' if payment_method == 'onchain' else 'Offchain'} payment submitted for order {order_id}"
+            )
+            output_model(payment_result, title="Payment Result")
             output_model(refreshed_order, title=f"Order {order_id}")
     except typer.Exit:
         raise

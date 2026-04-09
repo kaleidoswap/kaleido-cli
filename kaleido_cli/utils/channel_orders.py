@@ -743,14 +743,21 @@ async def _get_channel_order(
 
 
 def _channel_wallet_payment_summary(order: ChannelOrderResponse) -> dict[str, Any]:
-    payment = order.payment.bolt11
+    bolt11 = order.payment.bolt11
+    onchain = order.payment.onchain
     return {
         "order_id": order.order_id,
         "order_state": order.order_state,
-        "payment_state": payment.state,
-        "order_total_sat": payment.order_total_sat,
-        "fee_total_sat": payment.fee_total_sat,
-        "expires_at": payment.expires_at,
+        "offchain_payment_state": bolt11.state,
+        "offchain_order_total_sat": bolt11.order_total_sat,
+        "offchain_fee_total_sat": bolt11.fee_total_sat,
+        "offchain_expires_at": bolt11.expires_at,
+        "onchain_payment_state": onchain.state,
+        "onchain_order_total_sat": onchain.order_total_sat,
+        "onchain_fee_total_sat": onchain.fee_total_sat,
+        "onchain_address": onchain.address,
+        "onchain_min_confirmations": onchain.min_onchain_payment_confirmations,
+        "onchain_expires_at": onchain.expires_at,
     }
 
 
