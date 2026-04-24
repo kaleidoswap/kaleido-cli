@@ -23,6 +23,13 @@ DEFAULT_BITCOIND_RPC_PORT = 38332
 DEFAULT_INDEXER_URL = "electrum.signet.kaleidoswap.com:60601"
 DEFAULT_PROXY_ENDPOINT = "rpcs://proxy.iriswallet.com/0.2/json-rpc"
 
+DEFAULT_REGTEST_BITCOIND_RPC_USERNAME = "user"
+DEFAULT_REGTEST_BITCOIND_RPC_PASSWORD = "password"
+DEFAULT_REGTEST_BITCOIND_RPC_HOST = "regtest-bitcoind.rgbtools.org"
+DEFAULT_REGTEST_BITCOIND_RPC_PORT = 80
+DEFAULT_REGTEST_INDEXER_URL = "electrum.rgbtools.org:50041"
+DEFAULT_REGTEST_PROXY_ENDPOINT = "rpcs://proxy.iriswallet.com/0.2/json-rpc"
+
 
 def normalize_network_name(network: str) -> str:
     """Normalize friendly CLI aliases to the network value expected by RLN."""
