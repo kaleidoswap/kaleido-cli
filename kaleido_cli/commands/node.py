@@ -17,6 +17,12 @@ from kaleido_cli.config import (
     DEFAULT_INDEXER_URL,
     DEFAULT_NETWORK,
     DEFAULT_PROXY_ENDPOINT,
+    DEFAULT_REGTEST_BITCOIND_RPC_HOST,
+    DEFAULT_REGTEST_BITCOIND_RPC_PASSWORD,
+    DEFAULT_REGTEST_BITCOIND_RPC_PORT,
+    DEFAULT_REGTEST_BITCOIND_RPC_USERNAME,
+    DEFAULT_REGTEST_INDEXER_URL,
+    DEFAULT_REGTEST_PROXY_ENDPOINT,
 )
 from kaleido_cli.context import get_client, state
 from kaleido_cli.docker_manager import (
@@ -103,6 +109,22 @@ def _resolve_name(name: str | None) -> str:
         print_info(f"  kaleido node <cmd> {n}")
     print_info("See 'kaleido node list' for details.")
     raise typer.Exit(1)
+
+
+def _prompt_unlock_service_profile() -> str:
+    while True:
+        raw = typer.prompt(
+            "Bitcoin services profile: [S]ignet defaults, [R]egtest defaults, [C]ustom",
+            default="S",
+        )
+        choice = raw.strip().lower()
+        if choice in {"s", "signet", "mutinynet", "signetcustom"}:
+            return "signet"
+        if choice in {"r", "regtest"}:
+            return "regtest"
+        if choice in {"c", "custom", "o", "other"}:
+            return "custom"
+        print_error("Choose S for signet, R for regtest, or C for custom.")
 
 
 # ---------------------------------------------------------------------------
@@ -558,8 +580,14 @@ async def _node_init(password: str, mnemonic: str | None) -> None:
     "unlock",
     epilog=(
         "[bold]Examples[/bold]\n\n"
-        "  Simple unlock (uses Kaleidoswap mutinynet defaults):\n"
+        "  Simple unlock (choose signet, regtest, or custom services):\n"
         "  [cyan]kaleido node unlock[/cyan]\n\n"
+        "  Non-interactive signet defaults:\n"
+        "  [cyan]kaleido --agent node unlock --password mysecret[/cyan]\n\n"
+        "  Regtest defaults:\n"
+        "  [cyan]kaleido node unlock --bitcoind-user user --bitcoind-pass password \\\n"
+        "    --bitcoind-host regtest-bitcoind.rgbtools.org --bitcoind-port 80 \\\n"
+        "    --indexer-url electrum.rgbtools.org:50041[/cyan]\n\n"
         "  Override bitcoind credentials:\n"
         "  [cyan]kaleido node unlock --bitcoind-user alice --bitcoind-pass hunter2[/cyan]\n\n"
         "  Full custom override:\n"
@@ -630,10 +658,22 @@ def node_unlock(
         resolved_password = typer.prompt("Wallet password", hide_input=True)
 
     if is_interactive():
-        use_defaults = typer.confirm(
-            "Use default Kaleidoswap mutinynet services (bitcoind, indexer, proxy)?", default=True
-        )
-        if not use_defaults:
+        profile = _prompt_unlock_service_profile()
+        if profile == "signet":
+            bitcoind_user = DEFAULT_BITCOIND_RPC_USERNAME
+            bitcoind_pass = DEFAULT_BITCOIND_RPC_PASSWORD
+            bitcoind_host = DEFAULT_BITCOIND_RPC_HOST
+            bitcoind_port = DEFAULT_BITCOIND_RPC_PORT
+            indexer_url = DEFAULT_INDEXER_URL
+            proxy_endpoint = DEFAULT_PROXY_ENDPOINT
+        elif profile == "regtest":
+            bitcoind_user = DEFAULT_REGTEST_BITCOIND_RPC_USERNAME
+            bitcoind_pass = DEFAULT_REGTEST_BITCOIND_RPC_PASSWORD
+            bitcoind_host = DEFAULT_REGTEST_BITCOIND_RPC_HOST
+            bitcoind_port = DEFAULT_REGTEST_BITCOIND_RPC_PORT
+            indexer_url = DEFAULT_REGTEST_INDEXER_URL
+            proxy_endpoint = DEFAULT_REGTEST_PROXY_ENDPOINT
+        else:
             bitcoind_user = typer.prompt("bitcoind RPC username", default=bitcoind_user)
             bitcoind_pass = typer.prompt(
                 "bitcoind RPC password", default=bitcoind_pass, hide_input=True
@@ -642,13 +682,6 @@ def node_unlock(
             bitcoind_port = typer.prompt("bitcoind RPC port", default=bitcoind_port, type=int)
             indexer_url = typer.prompt("Electrs indexer URL", default=indexer_url)
             proxy_endpoint = typer.prompt("RGB proxy endpoint", default=proxy_endpoint)
-        else:
-            bitcoind_user = DEFAULT_BITCOIND_RPC_USERNAME
-            bitcoind_pass = DEFAULT_BITCOIND_RPC_PASSWORD
-            bitcoind_host = DEFAULT_BITCOIND_RPC_HOST
-            bitcoind_port = DEFAULT_BITCOIND_RPC_PORT
-            indexer_url = DEFAULT_INDEXER_URL
-            proxy_endpoint = DEFAULT_PROXY_ENDPOINT
         raw = typer.prompt("[OPTIONAL] Lightning announce alias (Enter to skip)", default="")
         if raw.strip():
             announce_alias = raw.strip()
