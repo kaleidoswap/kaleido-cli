@@ -22,15 +22,22 @@ Manage RGB Lightning Nodes and trade on [Kaleidoswap](https://kaleidoswap.com) â
 ## Requirements
 
 - Python 3.10+
-- `curl` or `wget` for the one-line bootstrap installer
-- [uv](https://docs.astral.sh/uv/) (recommended) or pip
-- Docker & Docker Compose (required for `node` commands)
+- `curl` or `wget` only for the one-line shell bootstrap command
+- Docker & Docker Compose only for Docker-based `node` commands
 
 ---
 
 ## Installation
 
 ### One command for macOS, Linux, and WSL
+
+With Python only:
+
+```bash
+python3 -c "import urllib.request; exec(urllib.request.urlopen('https://raw.githubusercontent.com/kaleidoswap/kaleido-cli/master/install.py').read())"
+```
+
+Or with the shell bootstrap:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kaleidoswap/kaleido-cli/master/install.sh | sh
@@ -42,7 +49,7 @@ Or with `wget`:
 wget -qO- https://raw.githubusercontent.com/kaleidoswap/kaleido-cli/master/install.sh | sh
 ```
 
-The bootstrap script downloads the latest `master` branch, prefers `uv tool install` when available, and falls back to `python -m pip install --user`.
+The bootstrap script downloads the latest `master` branch, prefers `uv tool install` when available, and otherwise installs into an isolated Kaleido virtual environment using Python's standard library. It does not install packages into the system Python environment.
 
 Then run:
 
@@ -79,6 +86,8 @@ For Windows or a cross-platform Python-based installer:
 ```bash
 python install.py
 ```
+
+The Python installer has the same minimal requirement: Python 3.10+. When `uv` is unavailable, it creates a dedicated app virtual environment and writes a `kaleido` launcher into your user script directory.
 
 For a local editable install with the existing Makefile helper:
 
