@@ -98,6 +98,7 @@ def mock_client(mocker):
     rln.list_transactions = AsyncMock()
     rln.estimate_fee = AsyncMock()
     rln.shutdown = AsyncMock()
+    rln.unlock_wallet = AsyncMock()
     rln.backup = AsyncMock()
     rln.restore = AsyncMock()
     rln.change_password = AsyncMock()
