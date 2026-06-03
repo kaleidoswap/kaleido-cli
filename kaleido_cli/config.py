@@ -20,7 +20,7 @@ DEFAULT_BITCOIND_RPC_USERNAME = "user"
 DEFAULT_BITCOIND_RPC_PASSWORD = "default_password"
 DEFAULT_BITCOIND_RPC_HOST = "bitcoind.signet.kaleidoswap.com"
 DEFAULT_BITCOIND_RPC_PORT = 38332
-DEFAULT_INDEXER_URL = "electrum.signet.kaleidoswap.com:60601"
+DEFAULT_INDEXER_URL = "https://esplora.signet.kaleidoswap.com"
 DEFAULT_PROXY_ENDPOINT = "rpcs://proxy.iriswallet.com/0.2/json-rpc"
 
 DEFAULT_REGTEST_BITCOIND_RPC_USERNAME = "user"

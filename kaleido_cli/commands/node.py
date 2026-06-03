@@ -632,7 +632,10 @@ def node_unlock(
     ] = DEFAULT_BITCOIND_RPC_PORT,
     indexer_url: Annotated[
         str,
-        typer.Option("--indexer-url", help="Electrs indexer URL."),
+        typer.Option(
+            "--indexer-url",
+            help="Indexer URL — Esplora (https://…) or Electrum (host:port).",
+        ),
     ] = DEFAULT_INDEXER_URL,
     proxy_endpoint: Annotated[
         str,
@@ -680,7 +683,9 @@ def node_unlock(
             )
             bitcoind_host = typer.prompt("bitcoind RPC host", default=bitcoind_host)
             bitcoind_port = typer.prompt("bitcoind RPC port", default=bitcoind_port, type=int)
-            indexer_url = typer.prompt("Electrs indexer URL", default=indexer_url)
+            indexer_url = typer.prompt(
+                "Indexer URL (Esplora https:// or Electrum host:port)", default=indexer_url
+            )
             proxy_endpoint = typer.prompt("RGB proxy endpoint", default=proxy_endpoint)
         raw = typer.prompt("[OPTIONAL] Lightning announce alias (Enter to skip)", default="")
         if raw.strip():
