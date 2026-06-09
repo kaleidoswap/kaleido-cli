@@ -46,13 +46,13 @@ from kaleido_cli.output import (
 from kaleido_cli.utils.pairs import (
     pair_assets,
     resolve_asset_id_for_layer,
+    resolve_pair_from_options,
     resolve_quote_layers,
     resolve_trading_pair,
 )
 from kaleido_cli.utils.prompts import (
     display_amount_to_raw,
     resolve_amount_pair,
-    resolve_pair,
     resolve_required_text,
 )
 from kaleido_cli.utils.swaps import (
@@ -117,14 +117,14 @@ def _confirm_quote_or_exit(quote: PairQuoteResponse, *, title: str, yes: bool) -
 
 
 async def _fetch_quote(
+    client,
+    pairs: TradingPairsResponse,
     pair: str,
     from_amount: str | None,
     to_amount: str | None,
     from_layer: str,
     to_layer: str,
 ) -> PairQuoteResponse:
-    client = get_client()
-    pairs: TradingPairsResponse = await client.maker.list_pairs()
     resolved_pair = resolve_trading_pair(pairs.pairs, pair)
     if not resolved_pair:
         print_error(f"Pair {pair!r} not found.")
@@ -172,6 +172,40 @@ async def _fetch_quote(
         ),
     )
     return await client.maker.get_quote(body)
+
+
+async def _resolve_swap_quote_inputs(
+    client,
+    *,
+    pair: str | None,
+    from_amount: str | None,
+    to_amount: str | None,
+    from_layer: str | None,
+    to_layer: str | None,
+    prompt_prefix: str,
+) -> tuple[TradingPairsResponse, str, str | None, str | None, str, str]:
+    if is_interactive():
+        print_info("Fetching available trading pairs...")
+    pairs: TradingPairsResponse = await client.maker.list_pairs()
+    resolved_pair = resolve_pair_from_options(pairs.pairs, pair)
+    resolved_from_amount, resolved_to_amount = resolve_amount_pair(
+        from_amount,
+        to_amount,
+        prompt_prefix=prompt_prefix,
+        default_choice="R",
+        pair=resolved_pair,
+    )
+    resolved_from_layer, resolved_to_layer = resolve_quote_layers(
+        resolved_pair, from_layer, to_layer
+    )
+    return (
+        pairs,
+        resolved_pair,
+        resolved_from_amount,
+        resolved_to_amount,
+        resolved_from_layer,
+        resolved_to_layer,
+    )
 
 
 @order_app.command(
@@ -241,30 +275,15 @@ def order_create(
     ] = None,
 ) -> None:
     """Create a maker swap order from a live quote."""
-    resolved_pair = resolve_pair(pair)
-    resolved_from_amount, resolved_to_amount = resolve_amount_pair(
-        from_amount, to_amount, prompt_prefix="Order", default_choice="R", pair=resolved_pair
-    )
-    resolved_from_layer, resolved_to_layer = resolve_quote_layers(
-        resolved_pair, from_layer, to_layer
-    )
-    resolved_receiver_address = resolve_required_text(
-        receiver_address, "Receiver address / invoice", "--receiver-address"
-    )
-    resolved_receiver_format = resolve_required_text(
-        receiver_format,
-        "Receiver format (e.g. BOLT11, RGB_INVOICE, BTC_ADDRESS)",
-        "--receiver-format",
-    )
     asyncio.run(
         _order_create(
-            resolved_pair,
-            resolved_from_amount,
-            resolved_to_amount,
-            resolved_from_layer,
-            resolved_to_layer,
-            resolved_receiver_address,
-            resolved_receiver_format,
+            pair,
+            from_amount,
+            to_amount,
+            from_layer,
+            to_layer,
+            receiver_address,
+            receiver_format,
             min_onchain_conf,
             refund_address,
             email,
@@ -273,27 +292,59 @@ def order_create(
 
 
 async def _order_create(
-    pair: str,
+    pair: str | None,
     from_amount: str | None,
     to_amount: str | None,
-    from_layer: str,
-    to_layer: str,
-    receiver_address: str,
-    receiver_format: str,
+    from_layer: str | None,
+    to_layer: str | None,
+    receiver_address: str | None,
+    receiver_format: str | None,
     min_onchain_conf: int,
     refund_address: str | None,
     email: str | None,
 ) -> None:
     try:
         client = get_client()
-        quote = await _fetch_quote(pair, from_amount, to_amount, from_layer, to_layer)
+        (
+            pairs,
+            resolved_pair,
+            resolved_from_amount,
+            resolved_to_amount,
+            resolved_from_layer,
+            resolved_to_layer,
+        ) = await _resolve_swap_quote_inputs(
+            client,
+            pair=pair,
+            from_amount=from_amount,
+            to_amount=to_amount,
+            from_layer=from_layer,
+            to_layer=to_layer,
+            prompt_prefix="Order",
+        )
+        resolved_receiver_address = resolve_required_text(
+            receiver_address, "Receiver address / invoice", "--receiver-address"
+        )
+        resolved_receiver_format = resolve_required_text(
+            receiver_format,
+            "Receiver format (e.g. BOLT11, RGB_INVOICE, BTC_ADDRESS)",
+            "--receiver-format",
+        )
+        quote = await _fetch_quote(
+            client,
+            pairs,
+            resolved_pair,
+            resolved_from_amount,
+            resolved_to_amount,
+            resolved_from_layer,
+            resolved_to_layer,
+        )
         body = CreateSwapOrderRequest(
             rfq_id=quote.rfq_id,
             from_asset=quote.from_asset,
             to_asset=quote.to_asset,
             receiver_address=ReceiverAddress(
-                address=receiver_address,
-                format=ReceiverAddressFormat(receiver_format),
+                address=resolved_receiver_address,
+                format=ReceiverAddressFormat(resolved_receiver_format),
             ),
             min_onchain_conf=min_onchain_conf,
             refund_address=refund_address,
@@ -305,6 +356,8 @@ async def _order_create(
         else:
             print_success(f"Swap order created: {resp.id}")
             output_model(resp, title="Swap Order")
+    except typer.Exit:
+        raise
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
@@ -491,41 +544,54 @@ def atomic_init(
     ] = False,
 ) -> None:
     """Initialize an atomic swap against the maker server using a live quote."""
-    resolved_pair = resolve_pair(pair)
-    resolved_from_amount, resolved_to_amount = resolve_amount_pair(
-        from_amount,
-        to_amount,
-        prompt_prefix="Atomic swap",
-        default_choice="R",
-        pair=resolved_pair,
-    )
-    resolved_from_layer, resolved_to_layer = resolve_quote_layers(
-        resolved_pair, from_layer, to_layer
-    )
     asyncio.run(
         _atomic_init(
-            resolved_pair,
-            resolved_from_amount,
-            resolved_to_amount,
-            resolved_from_layer,
-            resolved_to_layer,
+            pair,
+            from_amount,
+            to_amount,
+            from_layer,
+            to_layer,
             yes,
         )
     )
 
 
 async def _atomic_init(
-    pair: str,
+    pair: str | None,
     from_amount: str | None,
     to_amount: str | None,
-    from_layer: str,
-    to_layer: str,
+    from_layer: str | None,
+    to_layer: str | None,
     yes: bool,
 ) -> None:
     try:
         client = get_client()
-        quote = await _fetch_quote(pair, from_amount, to_amount, from_layer, to_layer)
-        _confirm_quote_or_exit(quote, title=f"Quote — {pair.upper()}", yes=yes)
+        (
+            pairs,
+            resolved_pair,
+            resolved_from_amount,
+            resolved_to_amount,
+            resolved_from_layer,
+            resolved_to_layer,
+        ) = await _resolve_swap_quote_inputs(
+            client,
+            pair=pair,
+            from_amount=from_amount,
+            to_amount=to_amount,
+            from_layer=from_layer,
+            to_layer=to_layer,
+            prompt_prefix="Atomic swap",
+        )
+        quote = await _fetch_quote(
+            client,
+            pairs,
+            resolved_pair,
+            resolved_from_amount,
+            resolved_to_amount,
+            resolved_from_layer,
+            resolved_to_layer,
+        )
+        _confirm_quote_or_exit(quote, title=f"Quote — {resolved_pair}", yes=yes)
         body = SwapRequest(
             rfq_id=quote.rfq_id,
             from_asset=quote.from_asset.asset_id,
@@ -555,6 +621,8 @@ async def _atomic_init(
                 f"  kaleido swap atomic execute --auto-whitelist --swapstring '{resp.swapstring}' "
                 f"--taker-pubkey <pubkey> --payment-hash {resp.payment_hash}"
             )
+    except typer.Exit:
+        raise
     except Exception as e:
         print_error(f"Error: {e}")
         raise typer.Exit(1)
@@ -740,24 +808,13 @@ def atomic_run(
     ] = False,
 ) -> None:
     """Run an atomic swap end-to-end using the local node as taker."""
-    resolved_pair = resolve_pair(pair)
-    resolved_from_amount, resolved_to_amount = resolve_amount_pair(
-        from_amount,
-        to_amount,
-        prompt_prefix="Atomic swap",
-        default_choice="R",
-        pair=resolved_pair,
-    )
-    resolved_from_layer, resolved_to_layer = resolve_quote_layers(
-        resolved_pair, from_layer, to_layer
-    )
     asyncio.run(
         _atomic_run(
-            resolved_pair,
-            resolved_from_amount,
-            resolved_to_amount,
-            resolved_from_layer,
-            resolved_to_layer,
+            pair,
+            from_amount,
+            to_amount,
+            from_layer,
+            to_layer,
             taker_pubkey,
             yes,
         )
@@ -765,18 +822,42 @@ def atomic_run(
 
 
 async def _atomic_run(
-    pair: str,
+    pair: str | None,
     from_amount: str | None,
     to_amount: str | None,
-    from_layer: str,
-    to_layer: str,
+    from_layer: str | None,
+    to_layer: str | None,
     taker_pubkey_override: str | None,
     yes: bool,
 ) -> None:
     try:
         client = get_client(require_node=True)
-        quote = await _fetch_quote(pair, from_amount, to_amount, from_layer, to_layer)
-        _confirm_quote_or_exit(quote, title=f"Quote — {pair.upper()}", yes=yes)
+        (
+            pairs,
+            resolved_pair,
+            resolved_from_amount,
+            resolved_to_amount,
+            resolved_from_layer,
+            resolved_to_layer,
+        ) = await _resolve_swap_quote_inputs(
+            client,
+            pair=pair,
+            from_amount=from_amount,
+            to_amount=to_amount,
+            from_layer=from_layer,
+            to_layer=to_layer,
+            prompt_prefix="Atomic swap",
+        )
+        quote = await _fetch_quote(
+            client,
+            pairs,
+            resolved_pair,
+            resolved_from_amount,
+            resolved_to_amount,
+            resolved_from_layer,
+            resolved_to_layer,
+        )
+        _confirm_quote_or_exit(quote, title=f"Quote — {resolved_pair}", yes=yes)
         init_resp: SwapResponse = await client.maker.init_swap(
             SwapRequest(
                 rfq_id=quote.rfq_id,

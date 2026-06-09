@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+import typer
 from kaleido_sdk import TradableAssetResponseModel, TradingPairResponseModel
+
+from kaleido_cli.output import is_interactive, print_error, print_info
 
 
 def canonical_pair(pair: TradingPairResponseModel) -> str:
@@ -58,6 +61,61 @@ def resolve_trading_pair(
         if reversed_pair(item) == normalized:
             return item, True
     return None
+
+
+def _pair_direction_options(
+    pairs: Sequence[TradingPairResponseModel] | None,
+) -> list[tuple[str, TradingPairResponseModel, bool]]:
+    options: list[tuple[str, TradingPairResponseModel, bool]] = []
+    seen: set[str] = set()
+    for item in pairs or []:
+        for label, is_reversed in (
+            (canonical_pair(item), False),
+            (reversed_pair(item), True),
+        ):
+            if label in seen:
+                continue
+            seen.add(label)
+            options.append((label, item, is_reversed))
+    return options
+
+
+def resolve_pair_from_options(
+    pairs: Sequence[TradingPairResponseModel] | None,
+    pair: str | None,
+) -> str:
+    """Validate an explicit pair or interactively select from live pair directions."""
+    if pair is not None:
+        normalized = pair.strip().upper()
+        if resolve_trading_pair(pairs, normalized):
+            return normalized
+        print_error(f"Pair {pair!r} not found.")
+        raise typer.Exit(1)
+
+    if not is_interactive():
+        print_error("PAIR argument is required in non-interactive mode.")
+        raise typer.Exit(1)
+
+    options = _pair_direction_options(pairs)
+    if not options:
+        print_error("No trading pairs are currently available.")
+        raise typer.Exit(1)
+
+    print_info("Available trading pairs:")
+    for index, (label, item, is_reversed) in enumerate(options, start=1):
+        route_count = len(item.routes or [])
+        direction = " (reverse)" if is_reversed else ""
+        status = " (inactive)" if not item.is_active else ""
+        print_info(
+            f"{index}. {label}{direction} - {route_count} route"
+            f"{'' if route_count == 1 else 's'}{status}"
+        )
+
+    while True:
+        selected = typer.prompt("Select trading pair number", type=int)
+        if 1 <= selected <= len(options):
+            return options[selected - 1][0]
+        print_error(f"Select a number from 1 to {len(options)}.")
 
 
 def default_layer_for_asset(ticker: str) -> str:
