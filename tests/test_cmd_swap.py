@@ -165,9 +165,7 @@ def test_swap_atomic_init_no_pair_agent_mode_exits_1(runner, mock_client):
     assert result.exit_code != 0
 
 
-def test_swap_atomic_init_fetches_pairs_before_interactive_selection(
-    runner, mock_client, mocker
-):
+def test_swap_atomic_init_fetches_pairs_before_interactive_selection(runner, mock_client, mocker):
     mocker.patch("kaleido_cli.commands.swap.is_interactive", return_value=True)
     mocker.patch("kaleido_cli.utils.pairs.is_interactive", return_value=True)
     mocker.patch("kaleido_cli.utils.quotes.is_interactive", return_value=True)
@@ -190,6 +188,31 @@ def test_swap_atomic_init_fetches_pairs_before_interactive_selection(
     request = mock_client.maker.get_quote.await_args.args[0]
     assert request.from_asset.asset_id == "rgb:usdt"
     assert request.to_asset.asset_id == "BTC"
+
+
+def test_swap_atomic_init_prompts_for_selected_source_amount(runner, mock_client, mocker):
+    mocker.patch("kaleido_cli.commands.swap.is_interactive", return_value=True)
+    mocker.patch("kaleido_cli.utils.pairs.is_interactive", return_value=True)
+    mocker.patch("kaleido_cli.utils.quotes.is_interactive", return_value=True)
+    mocker.patch("kaleido_cli.utils.prompts.is_interactive", return_value=True)
+    mock_client.maker.list_pairs.return_value = _pairs_resp()
+    mock_client.maker.get_quote.return_value = _quote()
+    mock_client.maker.init_swap.return_value = _swap_resp()
+
+    result = runner.invoke(
+        app,
+        ["swap", "atomic", "init", "--yes"],
+        input="2\n5\n",
+    )
+
+    assert result.exit_code == 0
+    assert "Swap amount (USDT, display units)" in result.output
+    assert "send amount or" not in result.output
+    request = mock_client.maker.get_quote.await_args.args[0]
+    assert request.from_asset.asset_id == "rgb:usdt"
+    assert request.from_asset.amount == 5_000_000
+    assert request.to_asset.asset_id == "BTC"
+    assert request.to_asset.amount is None
 
 
 def test_swap_atomic_init_json(runner, mock_client):

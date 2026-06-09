@@ -207,12 +207,8 @@ def channel_open(
         },
     )
 
-    resolved_peer = resolve_required_text(
-        peer, "Peer (pubkey@host:port)", "PEER argument"
-    )
-    resolved_capacity = resolve_required_int(
-        capacity, "Channel capacity (satoshis)", "--capacity"
-    )
+    resolved_peer = resolve_required_text(peer, "Peer (pubkey@host:port)", "PEER argument")
+    resolved_capacity = resolve_required_int(capacity, "Channel capacity (satoshis)", "--capacity")
 
     if is_interactive():
         push_msat = typer.prompt("[OPTIONAL] Push msat to remote side", default=push_msat, type=int)
@@ -716,9 +712,7 @@ def channel_order_decide(
     ] = "",
 ) -> None:
     """Submit a rate decision for an LSP channel order."""
-    resolved_order_id = resolve_required_text(
-        order_id, "LSP order ID", "ORDER_ID argument"
-    )
+    resolved_order_id = resolve_required_text(order_id, "LSP order ID", "ORDER_ID argument")
 
     accept = resolve_accept_reject(accept, reject, "Accept this order?")
 

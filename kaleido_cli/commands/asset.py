@@ -172,9 +172,7 @@ def asset_issue_nia(
 ) -> None:
     """Issue a new NIA (Non-Inflatable Asset) RGB token."""
     resolved_name = resolve_required_text(name, "Asset name", "--name")
-    resolved_ticker = resolve_required_text(
-        ticker, "Ticker symbol (e.g. USDT)", "--ticker"
-    )
+    resolved_ticker = resolve_required_text(ticker, "Ticker symbol (e.g. USDT)", "--ticker")
     resolved_supply = resolve_required_int(supply, "Total supply (raw units)", "--supply")
 
     if is_interactive():
@@ -430,12 +428,8 @@ def asset_send(
     resolved_asset_id = resolve_required_text(
         asset_id, "RGB asset ID (rgb:...)", "ASSET_ID argument"
     )
-    resolved_amount = resolve_required_int(
-        amount, "Amount to send (raw units)", "AMOUNT argument"
-    )
-    resolved_invoice = resolve_required_text(
-        invoice, "Recipient RGB invoice", "INVOICE argument"
-    )
+    resolved_amount = resolve_required_int(amount, "Amount to send (raw units)", "AMOUNT argument")
+    resolved_invoice = resolve_required_text(invoice, "Recipient RGB invoice", "INVOICE argument")
 
     asyncio.run(
         _asset_send(
@@ -678,9 +672,7 @@ def asset_issue_uda(
     ] = 0,
 ) -> None:
     """Issue a new UDA (Unique Digital Asset / NFT) RGB token."""
-    resolved_ticker = resolve_required_text(
-        ticker, "Ticker symbol (e.g. NFT1)", "--ticker"
-    )
+    resolved_ticker = resolve_required_text(ticker, "Ticker symbol (e.g. NFT1)", "--ticker")
     resolved_name = resolve_required_text(name, "Asset name", "--name")
 
     description, file_path = resolve_asset_metadata(description, file_path)

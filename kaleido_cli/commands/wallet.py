@@ -119,9 +119,7 @@ def wallet_send(
     ] = False,
 ) -> None:
     """Send on-chain BTC."""
-    resolved_amount = resolve_required_int(
-        amount, "Amount to send (satoshis)", "AMOUNT argument"
-    )
+    resolved_amount = resolve_required_int(amount, "Amount to send (satoshis)", "AMOUNT argument")
     resolved_address = resolve_required_text(
         address, "Destination Bitcoin address", "ADDRESS argument"
     )

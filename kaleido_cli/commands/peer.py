@@ -65,9 +65,7 @@ def peer_connect(
     ] = None,
 ) -> None:
     """Connect to a peer."""
-    resolved_peer = resolve_required_text(
-        peer, "Peer (pubkey@host:port)", "PEER argument"
-    )
+    resolved_peer = resolve_required_text(peer, "Peer (pubkey@host:port)", "PEER argument")
 
     asyncio.run(_peer_connect(resolved_peer))
 

@@ -49,7 +49,6 @@ async def resolve_quote_inputs(
     to_amount: str | None,
     from_layer: str | None,
     to_layer: str | None,
-    prompt_prefix: str,
 ) -> QuoteInputs:
     """Fetch live pairs before resolving pair, amount, and layer inputs."""
     if is_interactive():
@@ -59,8 +58,6 @@ async def resolve_quote_inputs(
     resolved_from_amount, resolved_to_amount = resolve_amount_pair(
         from_amount,
         to_amount,
-        prompt_prefix=prompt_prefix,
-        default_choice="R",
         pair=resolved_pair,
     )
     resolved_from_layer, resolved_to_layer = resolve_quote_layers(
@@ -140,7 +137,6 @@ async def resolve_and_fetch_quote(
     to_amount: str | None,
     from_layer: str | None,
     to_layer: str | None,
-    prompt_prefix: str,
 ) -> ResolvedQuote:
     """Resolve live quote inputs and fetch their quote in one shared flow."""
     inputs = await resolve_quote_inputs(
@@ -150,6 +146,5 @@ async def resolve_and_fetch_quote(
         to_amount=to_amount,
         from_layer=from_layer,
         to_layer=to_layer,
-        prompt_prefix=prompt_prefix,
     )
     return ResolvedQuote(inputs=inputs, quote=await fetch_pair_quote(client, inputs))

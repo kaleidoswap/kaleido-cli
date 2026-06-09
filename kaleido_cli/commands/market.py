@@ -166,7 +166,6 @@ async def _market_quote(
             to_amount=to_amount,
             from_layer=from_layer,
             to_layer=to_layer,
-            prompt_prefix="Quote",
         )
         quote = resolved_quote.quote
 

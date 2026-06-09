@@ -198,7 +198,6 @@ async def _order_create(
             to_amount=to_amount,
             from_layer=from_layer,
             to_layer=to_layer,
-            prompt_prefix="Order",
         )
         resolved_receiver_address = resolve_required_text(
             receiver_address, "Receiver address / invoice", "--receiver-address"
@@ -440,7 +439,6 @@ async def _atomic_init(
             to_amount=to_amount,
             from_layer=from_layer,
             to_layer=to_layer,
-            prompt_prefix="Atomic swap",
         )
         quote = resolved_quote.quote
         _confirm_quote_or_exit(quote, title=f"Quote — {resolved_quote.inputs.pair}", yes=yes)
@@ -681,7 +679,6 @@ async def _atomic_run(
             to_amount=to_amount,
             from_layer=from_layer,
             to_layer=to_layer,
-            prompt_prefix="Atomic swap",
         )
         quote = resolved_quote.quote
         _confirm_quote_or_exit(quote, title=f"Quote — {resolved_quote.inputs.pair}", yes=yes)

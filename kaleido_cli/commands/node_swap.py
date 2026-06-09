@@ -85,9 +85,7 @@ def node_init(
     ] = 100,
 ) -> None:
     """Initialize a low-level local node swap via maker-init."""
-    resolved_qty_from = resolve_required_int(
-        qty_from, "Quantity from (raw units)", "--qty-from"
-    )
+    resolved_qty_from = resolve_required_int(qty_from, "Quantity from (raw units)", "--qty-from")
     resolved_qty_to = resolve_required_int(qty_to, "Quantity to (raw units)", "--qty-to")
 
     asyncio.run(_node_init(from_asset, resolved_qty_from, to_asset, resolved_qty_to, timeout_sec))

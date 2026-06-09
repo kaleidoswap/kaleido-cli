@@ -69,22 +69,13 @@ def resolve_amount_pair(
     from_amount: str | None,
     to_amount: str | None,
     *,
-    prompt_prefix: str,
-    default_choice: str,
     pair: str,
 ) -> tuple[str | None, str | None]:
-    base_ticker, _, quote_ticker = pair.partition("/")
+    base_ticker, _, _ = pair.partition("/")
     send_label = base_ticker or "base asset"
-    receive_label = quote_ticker or "quote asset"
     if from_amount is None and to_amount is None:
         if is_interactive():
-            choice = typer.prompt(
-                f"{prompt_prefix} by [S]end amount or [R]eceive amount?",
-                default=default_choice,
-            )
-            if choice.strip().upper().startswith("R"):
-                return None, typer.prompt(f"Amount to receive ({receive_label}, display units)")
-            return typer.prompt(f"Amount to send ({send_label}, display units)"), None
+            return typer.prompt(f"Swap amount ({send_label}, display units)"), None
         print_error("Provide --from-amount or --to-amount in non-interactive mode.")
         raise typer.Exit(1)
     if from_amount is not None and to_amount is not None:
