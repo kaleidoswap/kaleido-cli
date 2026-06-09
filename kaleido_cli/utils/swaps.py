@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from kaleido_sdk import PairQuoteResponse
+from kaleido_sdk import ConfirmSwapRequest, PairQuoteResponse, SwapRequest
 from kaleido_sdk import Swap as MakerSwap
 
 
@@ -18,6 +18,31 @@ class DecodedSwapString:
     to_asset: str
     expiry: int
     payment_hash: str
+
+
+def swap_request_from_quote(quote: PairQuoteResponse) -> SwapRequest:
+    """Build an atomic swap initialization request from an accepted quote."""
+    return SwapRequest(
+        rfq_id=quote.rfq_id,
+        from_asset=quote.from_asset.asset_id,
+        from_amount=quote.from_asset.amount,
+        to_asset=quote.to_asset.asset_id,
+        to_amount=quote.to_asset.amount,
+    )
+
+
+def confirm_swap_request(
+    *,
+    swapstring: str,
+    taker_pubkey: str,
+    payment_hash: str,
+) -> ConfirmSwapRequest:
+    """Build an atomic swap execution request."""
+    return ConfirmSwapRequest(
+        swapstring=swapstring,
+        taker_pubkey=taker_pubkey,
+        payment_hash=payment_hash,
+    )
 
 
 def _normalize_asset_identifier(value: str) -> str:

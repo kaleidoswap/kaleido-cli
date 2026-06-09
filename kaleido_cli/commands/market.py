@@ -9,25 +9,19 @@ import typer
 
 from kaleido_cli.context import get_client
 from kaleido_cli.output import (
-    is_interactive,
     is_json_mode,
     output_collection,
     output_model,
     print_error,
     print_json,
 )
+from kaleido_cli.utils.errors import raise_cli_error
 from kaleido_cli.utils.pairs import (
     canonical_pair,
-    pair_assets,
-    resolve_asset_id_for_layer,
-    resolve_quote_layers,
     resolve_trading_pair,
 )
-from kaleido_cli.utils.prompts import (
-    display_amount_to_raw,
-    resolve_amount_pair,
-    resolve_pair,
-)
+from kaleido_cli.utils.prompts import resolve_pair
+from kaleido_cli.utils.quotes import resolve_and_fetch_quote
 
 market_app = typer.Typer(
     no_args_is_help=True,
@@ -61,8 +55,7 @@ async def _market_assets() -> None:
             item_title="Asset — {index}",
         )
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @market_app.command("pairs")
@@ -92,8 +85,7 @@ async def _market_pairs() -> None:
             )
         output_collection("Trading Pairs", items, item_title="Pair — {index}")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @market_app.command(
@@ -147,100 +139,46 @@ def market_quote(
     ] = None,
 ) -> None:
     """Get a swap quote for a trading pair."""
-    resolved_pair = resolve_pair(pair)
-    resolved_from_amount, resolved_to_amount = resolve_amount_pair(
-        from_amount,
-        to_amount,
-        prompt_prefix="Quote",
-        default_choice="R",
-        pair=resolved_pair,
-    )
-
-    resolved_from_layer, resolved_to_layer = resolve_quote_layers(
-        resolved_pair, from_layer, to_layer
-    )
     asyncio.run(
         _market_quote(
-            resolved_pair,
-            resolved_from_amount,
-            resolved_to_amount,
-            resolved_from_layer,
-            resolved_to_layer,
+            pair,
+            from_amount,
+            to_amount,
+            from_layer,
+            to_layer,
         )
     )
 
 
 async def _market_quote(
-    pair: str,
+    pair: str | None,
     from_amount: str | None,
     to_amount: str | None,
-    from_layer: str,
-    to_layer: str,
+    from_layer: str | None,
+    to_layer: str | None,
 ) -> None:
-    from kaleido_sdk import Layer, PairQuoteRequest, SwapLegInput
-
     try:
         client = get_client()
-        pairs = await client.maker.list_pairs()
-        resolved_pair = resolve_trading_pair(pairs.pairs, pair)
-        if not resolved_pair:
-            print_error(
-                f"Pair {pair!r} not found. Use 'kaleido market pairs' to list available pairs."
-            )
-            raise typer.Exit(1)
-        matched_pair, is_reversed = resolved_pair
-        from_asset, to_asset = pair_assets(matched_pair, is_reversed)
-        try:
-            from_asset_id = resolve_asset_id_for_layer(from_asset, from_layer)
-            to_asset_id = resolve_asset_id_for_layer(to_asset, to_layer)
-        except ValueError as exc:
-            print_error(str(exc))
-            raise typer.Exit(1)
-        resolved_from_amount = (
-            display_amount_to_raw(
-                from_amount,
-                precision=from_asset.precision,
-                asset_label=from_asset.ticker,
-                option_name="--from-amount",
-            )
-            if from_amount is not None
-            else None
+        resolved_quote = await resolve_and_fetch_quote(
+            client,
+            pair=pair,
+            from_amount=from_amount,
+            to_amount=to_amount,
+            from_layer=from_layer,
+            to_layer=to_layer,
+            prompt_prefix="Quote",
         )
-        resolved_to_amount = (
-            display_amount_to_raw(
-                to_amount,
-                precision=to_asset.precision,
-                asset_label=to_asset.ticker,
-                option_name="--to-amount",
-            )
-            if to_amount is not None
-            else None
-        )
-
-        body = PairQuoteRequest(
-            from_asset=SwapLegInput(
-                asset_id=from_asset_id,
-                layer=Layer(from_layer),
-                amount=resolved_from_amount,
-            ),
-            to_asset=SwapLegInput(
-                asset_id=to_asset_id,
-                layer=Layer(to_layer),
-                amount=resolved_to_amount,
-            ),
-        )
-        quote = await client.maker.get_quote(body)
+        quote = resolved_quote.quote
 
         if is_json_mode():
             print_json(quote.model_dump())
             return
 
-        output_model(quote, title=f"Quote — {pair.upper()}")
+        output_model(quote, title=f"Quote — {resolved_quote.inputs.pair}")
     except typer.Exit:
         raise
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @market_app.command("info")
@@ -258,8 +196,7 @@ async def _market_info() -> None:
         else:
             output_model(info, title="Maker Node Info")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @market_app.command(
@@ -279,16 +216,7 @@ def market_routes(
     ] = None,
 ) -> None:
     """List available swap routes for a trading pair."""
-    resolved_pair: str
-    if pair is not None:
-        resolved_pair = pair
-    elif is_interactive():
-        resolved_pair = typer.prompt("Trading pair (e.g. BTC/USDT)")
-    else:
-        print_error("PAIR argument is required in non-interactive mode.")
-        raise typer.Exit(1)
-
-    asyncio.run(_market_routes(resolved_pair))
+    asyncio.run(_market_routes(resolve_pair(pair)))
 
 
 async def _market_routes(pair: str) -> None:
@@ -311,8 +239,7 @@ async def _market_routes(pair: str) -> None:
             item_title=f"Route — {pair.upper()} #{{index}}",
         )
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @market_app.command(
@@ -333,5 +260,4 @@ async def _market_analytics() -> None:
         else:
             output_model(stats, title="Order Analytics")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)

@@ -14,13 +14,13 @@ from kaleido_sdk.rln import (
 
 from kaleido_cli.context import get_client
 from kaleido_cli.output import (
-    is_interactive,
     is_json_mode,
     output_collection,
-    print_error,
     print_json,
     print_success,
 )
+from kaleido_cli.utils.errors import raise_cli_error
+from kaleido_cli.utils.prompts import resolve_required_text
 
 peer_app = typer.Typer(
     no_args_is_help=True,
@@ -46,8 +46,7 @@ async def _peer_list() -> None:
             "Peers", [p.model_dump() for p in (resp.peers or [])], item_title="Peer — {index}"
         )
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @peer_app.command(
@@ -66,14 +65,9 @@ def peer_connect(
     ] = None,
 ) -> None:
     """Connect to a peer."""
-    resolved_peer: str
-    if peer is not None:
-        resolved_peer = peer
-    elif is_interactive():
-        resolved_peer = typer.prompt("Peer (pubkey@host:port)")
-    else:
-        print_error("PEER argument is required in non-interactive mode.")
-        raise typer.Exit(1)
+    resolved_peer = resolve_required_text(
+        peer, "Peer (pubkey@host:port)", "PEER argument"
+    )
 
     asyncio.run(_peer_connect(resolved_peer))
 
@@ -84,8 +78,7 @@ async def _peer_connect(peer: str) -> None:
         await client.rln.connect_peer(ConnectPeerRequest(peer_pubkey_and_addr=peer))
         print_success(f"Connected to {peer}")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @peer_app.command(
@@ -99,14 +92,11 @@ def peer_disconnect(
     ] = None,
 ) -> None:
     """Disconnect from a peer."""
-    resolved_pubkey: str
-    if pubkey is not None:
-        resolved_pubkey = pubkey
-    elif is_interactive():
-        resolved_pubkey = typer.prompt("Peer pubkey (from 'kaleido peer list')")
-    else:
-        print_error("PUBKEY argument is required in non-interactive mode.")
-        raise typer.Exit(1)
+    resolved_pubkey = resolve_required_text(
+        pubkey,
+        "Peer pubkey (from 'kaleido peer list')",
+        "PUBKEY argument",
+    )
 
     asyncio.run(_peer_disconnect(resolved_pubkey))
 
@@ -117,5 +107,4 @@ async def _peer_disconnect(pubkey: str) -> None:
         await client.rln.disconnect_peer(DisconnectPeerRequest(peer_pubkey=pubkey))
         print_success(f"Disconnected from {pubkey}")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)

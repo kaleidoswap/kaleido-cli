@@ -170,6 +170,7 @@ def test_swap_atomic_init_fetches_pairs_before_interactive_selection(
 ):
     mocker.patch("kaleido_cli.commands.swap.is_interactive", return_value=True)
     mocker.patch("kaleido_cli.utils.pairs.is_interactive", return_value=True)
+    mocker.patch("kaleido_cli.utils.quotes.is_interactive", return_value=True)
     mocker.patch("kaleido_cli.utils.prompts.is_interactive", return_value=True)
     mock_client.maker.list_pairs.return_value = _pairs_resp()
     mock_client.maker.get_quote.return_value = _quote()

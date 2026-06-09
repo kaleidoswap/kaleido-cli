@@ -18,7 +18,6 @@ from kaleido_sdk.rln import (
 
 from kaleido_cli.context import get_client
 from kaleido_cli.output import (
-    is_interactive,
     is_json_mode,
     output_collection,
     output_model,
@@ -27,7 +26,8 @@ from kaleido_cli.output import (
     print_json,
     print_success,
 )
-from kaleido_cli.utils.prompts import resolve_required_text
+from kaleido_cli.utils.errors import raise_cli_error
+from kaleido_cli.utils.prompts import resolve_required_int, resolve_required_text
 
 node_swap_app = typer.Typer(
     no_args_is_help=True,
@@ -54,8 +54,7 @@ async def _node_pubkey() -> None:
         else:
             print_success(f"Taker pubkey: {pubkey}")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @node_swap_app.command(
@@ -86,23 +85,10 @@ def node_init(
     ] = 100,
 ) -> None:
     """Initialize a low-level local node swap via maker-init."""
-    resolved_qty_from: int
-    if qty_from is not None:
-        resolved_qty_from = qty_from
-    elif is_interactive():
-        resolved_qty_from = typer.prompt("Quantity from (raw units)", type=int)
-    else:
-        print_error("--qty-from is required in non-interactive mode.")
-        raise typer.Exit(1)
-
-    resolved_qty_to: int
-    if qty_to is not None:
-        resolved_qty_to = qty_to
-    elif is_interactive():
-        resolved_qty_to = typer.prompt("Quantity to (raw units)", type=int)
-    else:
-        print_error("--qty-to is required in non-interactive mode.")
-        raise typer.Exit(1)
+    resolved_qty_from = resolve_required_int(
+        qty_from, "Quantity from (raw units)", "--qty-from"
+    )
+    resolved_qty_to = resolve_required_int(qty_to, "Quantity to (raw units)", "--qty-to")
 
     asyncio.run(_node_init(from_asset, resolved_qty_from, to_asset, resolved_qty_to, timeout_sec))
 
@@ -132,8 +118,7 @@ async def _node_init(
             output_model(resp, title="Node Swap Init")
             print_info("Next step: whitelist on the taker side, then execute on the maker side.")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @node_swap_app.command(
@@ -164,8 +149,7 @@ async def _node_whitelist(swapstring: str) -> None:
         else:
             print_success("Swap whitelisted on taker node")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @node_swap_app.command(
@@ -219,8 +203,7 @@ async def _node_execute(
         else:
             print_success("Node swap executed successfully")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @node_swap_app.command(
@@ -262,8 +245,7 @@ async def _node_status(payment_hash: str, taker: bool) -> None:
             side = "Taker" if taker else "Maker"
             output_model(resp, title=f"{side} Node Swap — {payment_hash[:16]}…")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @node_swap_app.command(
@@ -291,5 +273,4 @@ async def _node_list() -> None:
             items.append({**swap.model_dump(), "role": "maker"})
         output_collection("Node Swaps", items, item_title="Node Swap — {index}")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)

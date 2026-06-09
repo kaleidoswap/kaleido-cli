@@ -26,13 +26,18 @@ from kaleido_sdk.rln import (
 
 from kaleido_cli.context import get_client
 from kaleido_cli.output import (
-    is_interactive,
     is_json_mode,
     output_collection,
     output_model,
     print_error,
     print_json,
     print_success,
+)
+from kaleido_cli.utils.errors import raise_cli_error
+from kaleido_cli.utils.prompts import (
+    require_option_when_set,
+    resolve_required_int,
+    resolve_required_text,
 )
 
 payment_app = typer.Typer(
@@ -86,9 +91,7 @@ def payment_invoice(
     ] = None,
 ) -> None:
     """Create a Lightning invoice (BOLT11)."""
-    if asset_amount is not None and asset_id is None:
-        print_error("--asset-amount requires --asset-id.")
-        raise typer.Exit(1)
+    require_option_when_set(asset_id, "--asset-id", **{"--asset-amount": asset_amount})
     asyncio.run(_payment_invoice(amount_msat, expiry, asset_id, asset_amount))
 
 
@@ -112,8 +115,7 @@ async def _payment_invoice(
         else:
             print_success(f"Invoice: {resp.invoice}")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @payment_app.command(
@@ -142,18 +144,9 @@ def payment_send(
     ] = None,
 ) -> None:
     """Send a Lightning payment."""
-    resolved_invoice: str
-    if invoice is not None:
-        resolved_invoice = invoice
-    elif is_interactive():
-        resolved_invoice = typer.prompt("BOLT11 invoice")
-    else:
-        print_error("INVOICE argument is required in non-interactive mode.")
-        raise typer.Exit(1)
+    resolved_invoice = resolve_required_text(invoice, "BOLT11 invoice", "INVOICE argument")
 
-    if asset_amount is not None and asset_id is None:
-        print_error("--asset-amount requires --asset-id.")
-        raise typer.Exit(1)
+    require_option_when_set(asset_id, "--asset-id", **{"--asset-amount": asset_amount})
 
     asyncio.run(_payment_send(resolved_invoice, amount_msat, asset_id, asset_amount))
 
@@ -178,8 +171,7 @@ async def _payment_send(
         else:
             output_model(resp, title="Payment Result")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @payment_app.command("list")
@@ -202,8 +194,7 @@ async def _payment_list() -> None:
             items.append(payload)
         output_collection("Payments", items, item_title="Payment — {index}")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @payment_app.command("status")
@@ -225,8 +216,7 @@ async def _payment_status(payment_hash: str) -> None:
         else:
             output_model(resp, title="Payment")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @payment_app.command(
@@ -287,8 +277,7 @@ async def _payment_invoice_status(invoice: str) -> None:
         else:
             output_model(resp, title="Invoice Status")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @payment_app.command(
@@ -321,23 +310,10 @@ def payment_keysend(
     ] = None,
 ) -> None:
     """Send a spontaneous Lightning payment (keysend) without needing an invoice."""
-    resolved_pubkey: str
-    if dest_pubkey is not None:
-        resolved_pubkey = dest_pubkey
-    elif is_interactive():
-        resolved_pubkey = typer.prompt("Destination pubkey")
-    else:
-        print_error("DEST_PUBKEY argument is required in non-interactive mode.")
-        raise typer.Exit(1)
-
-    resolved_amt: int
-    if amt_msat is not None:
-        resolved_amt = amt_msat
-    elif is_interactive():
-        resolved_amt = typer.prompt("Amount in msat", type=int)
-    else:
-        print_error("AMT_MSAT argument is required in non-interactive mode.")
-        raise typer.Exit(1)
+    resolved_pubkey = resolve_required_text(
+        dest_pubkey, "Destination pubkey", "DEST_PUBKEY argument"
+    )
+    resolved_amt = resolve_required_int(amt_msat, "Amount in msat", "AMT_MSAT argument")
 
     asyncio.run(_payment_keysend(resolved_pubkey, resolved_amt, asset_id, asset_amount))
 
@@ -363,5 +339,4 @@ async def _payment_keysend(
         else:
             output_model(resp, title="Keysend Result")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)

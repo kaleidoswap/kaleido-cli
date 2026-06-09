@@ -9,7 +9,7 @@ from kaleido_cli.output import is_interactive, print_error
 
 
 def resolve_optional_text(value: str | None, prompt: str, default: str = "") -> str:
-    if value is not None:
+    if value is not None and value.strip():
         return value
     if is_interactive():
         return typer.prompt(prompt, default=default)
@@ -25,13 +25,44 @@ def resolve_required_text(value: str | None, prompt: str, option_name: str) -> s
     raise typer.Exit(1)
 
 
-def resolve_pair(pair: str | None) -> str:
-    if pair is not None:
-        return pair
+def resolve_required_int(value: int | None, prompt: str, option_name: str) -> int:
+    if value is not None:
+        return value
     if is_interactive():
-        return typer.prompt("Trading pair (e.g. BTC/USDT)")
-    print_error("PAIR argument is required in non-interactive mode.")
+        return typer.prompt(prompt, type=int)
+    print_error(f"{option_name} is required in non-interactive mode.")
     raise typer.Exit(1)
+
+
+def resolve_accept_reject(accept: bool, reject: bool, prompt: str) -> bool:
+    """Resolve mutually exclusive accept/reject flags, prompting when interactive."""
+    if is_interactive() and not accept and not reject:
+        return typer.confirm(prompt, default=False)
+    if accept == reject:
+        print_error("Must specify exactly one of --accept or --reject")
+        raise typer.Exit(1)
+    return accept
+
+
+def require_option_when_set(
+    required_value: object | None,
+    required_name: str,
+    **dependent_options: object | None,
+) -> None:
+    """Require an option when one or more dependent options were supplied."""
+    supplied = [name for name, value in dependent_options.items() if value is not None]
+    if supplied and required_value is None:
+        verb = "requires" if len(supplied) == 1 else "require"
+        print_error(f"{' and '.join(supplied)} {verb} {required_name}.")
+        raise typer.Exit(1)
+
+
+def resolve_pair(pair: str | None) -> str:
+    return resolve_required_text(
+        pair,
+        "Trading pair (e.g. BTC/USDT)",
+        "PAIR argument",
+    )
 
 
 def resolve_amount_pair(

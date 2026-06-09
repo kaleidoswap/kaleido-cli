@@ -33,6 +33,8 @@ from kaleido_cli.output import (
     print_json,
     print_success,
 )
+from kaleido_cli.utils.errors import raise_cli_error
+from kaleido_cli.utils.prompts import resolve_required_int, resolve_required_text
 
 wallet_app = typer.Typer(
     no_args_is_help=True,
@@ -59,8 +61,7 @@ async def _wallet_address() -> None:
         else:
             print_success(f"Address: {resp.address}")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @wallet_app.command(
@@ -90,8 +91,7 @@ async def _wallet_balance(skip_sync: bool) -> None:
             return
         output_model(resp, title="BTC Balance")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @wallet_app.command(
@@ -119,23 +119,12 @@ def wallet_send(
     ] = False,
 ) -> None:
     """Send on-chain BTC."""
-    resolved_amount: int
-    if amount is not None:
-        resolved_amount = amount
-    elif is_interactive():
-        resolved_amount = typer.prompt("Amount to send (satoshis)", type=int)
-    else:
-        print_error("AMOUNT argument is required in non-interactive mode.")
-        raise typer.Exit(1)
-
-    resolved_address: str
-    if address is not None:
-        resolved_address = address
-    elif is_interactive():
-        resolved_address = typer.prompt("Destination Bitcoin address")
-    else:
-        print_error("ADDRESS argument is required in non-interactive mode.")
-        raise typer.Exit(1)
+    resolved_amount = resolve_required_int(
+        amount, "Amount to send (satoshis)", "AMOUNT argument"
+    )
+    resolved_address = resolve_required_text(
+        address, "Destination Bitcoin address", "ADDRESS argument"
+    )
 
     asyncio.run(_wallet_send(resolved_amount, resolved_address, fee_rate, skip_sync))
 
@@ -155,8 +144,7 @@ async def _wallet_send(amount: int, address: str, fee_rate: int, skip_sync: bool
         else:
             print_success(f"Sent! TXID: {resp.txid}")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @wallet_app.command(
@@ -197,8 +185,7 @@ async def _wallet_utxos(skip_sync: bool) -> None:
             )
         output_collection("UTXOs", items, item_title="UTXO — {index}")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @wallet_app.command(
@@ -280,8 +267,7 @@ async def _wallet_create_utxos(
         created_msg = f"{num} UTXO(s)" if num else "UTXOs"
         print_success(f"Created {created_msg}.")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @wallet_app.command(
@@ -317,8 +303,7 @@ async def _wallet_transactions(skip_sync: bool) -> None:
             item_title="Transaction — {index}",
         )
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @wallet_app.command(
@@ -372,8 +357,7 @@ async def _wallet_backup(path: str, password: str) -> None:
         await client.rln.backup(BackupRequest(backup_path=path, password=password))
         print_success(f"Backup saved to {path}")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @wallet_app.command(
@@ -426,8 +410,7 @@ async def _wallet_restore(path: str, password: str) -> None:
         await client.rln.restore(RestoreRequest(backup_path=path, password=password))
         print_success(f"Restored from {path}")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @wallet_app.command(
@@ -469,8 +452,7 @@ async def _wallet_change_password(old_password: str, new_password: str) -> None:
         )
         print_success("Password changed successfully.")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @wallet_app.command(
@@ -504,5 +486,4 @@ async def _wallet_estimate_fee(blocks: int) -> None:
                 f"Estimated fee rate: {resp.fee_rate} sat/vbyte (target: {blocks} blocks)"
             )
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
