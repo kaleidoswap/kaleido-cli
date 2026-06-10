@@ -191,6 +191,15 @@ async def _order_create(
 ) -> None:
     try:
         client = get_client()
+
+        if not is_interactive():
+            if receiver_address is None:
+                print_error("--receiver-address is required in non-interactive mode.")
+                raise typer.Exit(1)
+            if receiver_format is None:
+                print_error("--receiver-format is required in non-interactive mode.")
+                raise typer.Exit(1)
+
         resolved_quote = await resolve_and_fetch_quote(
             client,
             pair=pair,
