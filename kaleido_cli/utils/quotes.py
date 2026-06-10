@@ -51,7 +51,20 @@ async def resolve_quote_inputs(
     to_layer: str | None,
 ) -> QuoteInputs:
     """Fetch live pairs before resolving pair, amount, and layer inputs."""
-    if is_interactive():
+    if from_amount is not None and to_amount is not None:
+        print_error("Provide exactly one of --from-amount or --to-amount.")
+        raise typer.Exit(1)
+
+    interactive = is_interactive()
+    if not interactive:
+        if pair is None:
+            print_error("PAIR argument is required in non-interactive mode.")
+            raise typer.Exit(1)
+        if from_amount is None and to_amount is None:
+            print_error("Provide --from-amount or --to-amount in non-interactive mode.")
+            raise typer.Exit(1)
+
+    if interactive:
         print_info("Fetching available trading pairs...")
     pairs: TradingPairsResponse = await client.maker.list_pairs()
     resolved_pair = resolve_pair_from_options(pairs.pairs, pair)
