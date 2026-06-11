@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import time
 from typing import Annotated
 
@@ -46,6 +45,9 @@ from kaleido_cli.output import (
     print_json,
     print_success,
 )
+from kaleido_cli.utils.assets import resolve_asset_metadata, sha256_file
+from kaleido_cli.utils.errors import raise_cli_error
+from kaleido_cli.utils.prompts import resolve_required_int, resolve_required_text
 
 asset_app = typer.Typer(
     no_args_is_help=True,
@@ -92,8 +94,7 @@ async def _asset_list() -> None:
                 items.append({**asset.model_dump(), "schema": "UDA"})
         output_collection("RGB Assets", items, item_title="RGB Asset — {index}")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @asset_app.command("balance")
@@ -115,8 +116,7 @@ async def _asset_balance(asset_id: str) -> None:
         else:
             output_model(resp, title=f"Balance — {asset_id[:20]}…")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @asset_app.command("metadata")
@@ -138,8 +138,7 @@ async def _asset_metadata(asset_id: str) -> None:
         else:
             output_model(resp, title=f"Metadata — {asset_id[:20]}…")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @issue_app.command(
@@ -172,32 +171,9 @@ def asset_issue_nia(
     ] = 0,
 ) -> None:
     """Issue a new NIA (Non-Inflatable Asset) RGB token."""
-    resolved_name: str
-    if name is not None:
-        resolved_name = name
-    elif is_interactive():
-        resolved_name = typer.prompt("Asset name")
-    else:
-        print_error("--name is required in non-interactive mode.")
-        raise typer.Exit(1)
-
-    resolved_ticker: str
-    if ticker is not None:
-        resolved_ticker = ticker
-    elif is_interactive():
-        resolved_ticker = typer.prompt("Ticker symbol (e.g. USDT)")
-    else:
-        print_error("--ticker is required in non-interactive mode.")
-        raise typer.Exit(1)
-
-    resolved_supply: int
-    if supply is not None:
-        resolved_supply = supply
-    elif is_interactive():
-        resolved_supply = typer.prompt("Total supply (raw units)", type=int)
-    else:
-        print_error("--supply is required in non-interactive mode.")
-        raise typer.Exit(1)
+    resolved_name = resolve_required_text(name, "Asset name", "--name")
+    resolved_ticker = resolve_required_text(ticker, "Ticker symbol (e.g. USDT)", "--ticker")
+    resolved_supply = resolve_required_int(supply, "Total supply (raw units)", "--supply")
 
     if is_interactive():
         precision = typer.prompt("[OPTIONAL] Decimal places (0 = whole units)", default=0, type=int)
@@ -217,8 +193,7 @@ async def _issue_nia(name: str, ticker: str, supply: int, precision: int) -> Non
             print_success(f"NIA asset issued: {resp.asset.asset_id}")
             output_model(resp, title="Issued Asset")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @issue_app.command(
@@ -255,31 +230,11 @@ def asset_issue_cfa(
     ] = 0,
 ) -> None:
     """Issue a new CFA (Collectible Fungible Asset) RGB token."""
-    resolved_name: str
-    if name is not None:
-        resolved_name = name
-    elif is_interactive():
-        resolved_name = typer.prompt("Asset name")
-    else:
-        print_error("--name is required in non-interactive mode.")
-        raise typer.Exit(1)
+    resolved_name = resolve_required_text(name, "Asset name", "--name")
+    resolved_supply = resolve_required_int(supply, "Total supply (raw units)", "--supply")
 
-    resolved_supply: int
-    if supply is not None:
-        resolved_supply = supply
-    elif is_interactive():
-        resolved_supply = typer.prompt("Total supply (raw units)", type=int)
-    else:
-        print_error("--supply is required in non-interactive mode.")
-        raise typer.Exit(1)
-
+    description, file_path = resolve_asset_metadata(description, file_path)
     if is_interactive():
-        raw = typer.prompt("[OPTIONAL] Description (Enter to skip)", default="")
-        if raw.strip():
-            description = raw.strip()
-        raw = typer.prompt("[OPTIONAL] Media file path (Enter to skip)", default="")
-        if raw.strip():
-            file_path = raw.strip()
         precision = typer.prompt("[OPTIONAL] Decimal places (0 = whole units)", default=0, type=int)
 
     asyncio.run(_issue_cfa(resolved_name, resolved_supply, description, file_path, precision))
@@ -294,16 +249,12 @@ async def _issue_cfa(
 ) -> None:
     try:
         client = get_client(require_node=True)
-        file_digest: str | None = None
-        if file_path:
-            with open(file_path, "rb") as f:
-                file_digest = hashlib.sha256(f.read()).hexdigest()
         body = IssueAssetCFARequest(
             name=name,
             amounts=[supply],
             precision=precision,
             details=description,
-            file_digest=file_digest,
+            file_digest=sha256_file(file_path),
         )
         resp: IssueAssetCFAResponse = await client.rln.issue_asset_cfa(body)
         if is_json_mode():
@@ -312,8 +263,7 @@ async def _issue_cfa(
             print_success(f"CFA asset issued: {resp.asset.asset_id}")
             output_model(resp, title="Issued Asset")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @asset_app.command(
@@ -363,14 +313,9 @@ def asset_invoice(
     ] = False,
 ) -> None:
     """Create an RGB invoice to receive assets."""
-    resolved_asset_id: str
-    if asset_id is not None:
-        resolved_asset_id = asset_id
-    elif is_interactive():
-        resolved_asset_id = typer.prompt("RGB asset ID (rgb:...)")
-    else:
-        print_error("ASSET_ID argument is required in non-interactive mode.")
-        raise typer.Exit(1)
+    resolved_asset_id = resolve_required_text(
+        asset_id, "RGB asset ID (rgb:...)", "ASSET_ID argument"
+    )
 
     if is_interactive() and amount is None:
         raw = typer.prompt(
@@ -414,8 +359,7 @@ async def _asset_invoice(
         else:
             print_success(f"Invoice: {resp.invoice}")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @asset_app.command(
@@ -481,32 +425,11 @@ def asset_send(
     ] = False,
 ) -> None:
     """Send RGB assets to an invoice."""
-    resolved_asset_id: str
-    if asset_id is not None:
-        resolved_asset_id = asset_id
-    elif is_interactive():
-        resolved_asset_id = typer.prompt("RGB asset ID (rgb:...)")
-    else:
-        print_error("ASSET_ID argument is required in non-interactive mode.")
-        raise typer.Exit(1)
-
-    resolved_amount: int
-    if amount is not None:
-        resolved_amount = amount
-    elif is_interactive():
-        resolved_amount = typer.prompt("Amount to send (raw units)", type=int)
-    else:
-        print_error("AMOUNT argument is required in non-interactive mode.")
-        raise typer.Exit(1)
-
-    resolved_invoice: str
-    if invoice is not None:
-        resolved_invoice = invoice
-    elif is_interactive():
-        resolved_invoice = typer.prompt("Recipient RGB invoice")
-    else:
-        print_error("INVOICE argument is required in non-interactive mode.")
-        raise typer.Exit(1)
+    resolved_asset_id = resolve_required_text(
+        asset_id, "RGB asset ID (rgb:...)", "ASSET_ID argument"
+    )
+    resolved_amount = resolve_required_int(amount, "Amount to send (raw units)", "AMOUNT argument")
+    resolved_invoice = resolve_required_text(invoice, "Recipient RGB invoice", "INVOICE argument")
 
     asyncio.run(
         _asset_send(
@@ -563,8 +486,7 @@ async def _asset_send(
         else:
             print_success(f"Sent! TXID: {resp.txid}")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @asset_app.command(
@@ -638,8 +560,7 @@ async def _asset_send_batch(json_file: str) -> None:
         print_error(f"Invalid JSON: {e}")
         raise typer.Exit(1)
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @asset_app.command(
@@ -679,8 +600,7 @@ async def _asset_transfers(asset_id: str) -> None:
             items.append(payload)
         output_collection("RGB Transfers", items, item_title="RGB Transfer — {index}")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @asset_app.command(
@@ -715,8 +635,7 @@ async def _asset_refresh(skip_sync: bool) -> None:
         await client.rln.refresh_transfers(body)
         print_success("Transfers refreshed.")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @issue_app.command(
@@ -753,31 +672,10 @@ def asset_issue_uda(
     ] = 0,
 ) -> None:
     """Issue a new UDA (Unique Digital Asset / NFT) RGB token."""
-    resolved_ticker: str
-    if ticker is not None:
-        resolved_ticker = ticker
-    elif is_interactive():
-        resolved_ticker = typer.prompt("Ticker symbol (e.g. NFT1)")
-    else:
-        print_error("--ticker is required in non-interactive mode.")
-        raise typer.Exit(1)
+    resolved_ticker = resolve_required_text(ticker, "Ticker symbol (e.g. NFT1)", "--ticker")
+    resolved_name = resolve_required_text(name, "Asset name", "--name")
 
-    resolved_name: str
-    if name is not None:
-        resolved_name = name
-    elif is_interactive():
-        resolved_name = typer.prompt("Asset name")
-    else:
-        print_error("--name is required in non-interactive mode.")
-        raise typer.Exit(1)
-
-    if is_interactive():
-        raw = typer.prompt("[OPTIONAL] Description (Enter to skip)", default="")
-        if raw.strip():
-            description = raw.strip()
-        raw = typer.prompt("[OPTIONAL] Media file path (Enter to skip)", default="")
-        if raw.strip():
-            file_path = raw.strip()
+    description, file_path = resolve_asset_metadata(description, file_path)
 
     asyncio.run(_issue_uda(resolved_ticker, resolved_name, description, file_path, precision))
 
@@ -791,16 +689,12 @@ async def _issue_uda(
 ) -> None:
     try:
         client = get_client(require_node=True)
-        media_file_digest: str | None = None
-        if file_path:
-            with open(file_path, "rb") as f:
-                media_file_digest = hashlib.sha256(f.read()).hexdigest()
         body = IssueAssetUDARequest(
             ticker=ticker,
             name=name,
             details=description,
             precision=precision,
-            media_file_digest=media_file_digest,
+            media_file_digest=sha256_file(file_path),
             attachments_file_digests=[],
         )
         resp: IssueAssetUDAResponse = await client.rln.issue_asset_uda(body)
@@ -810,8 +704,7 @@ async def _issue_uda(
             print_success(f"UDA asset issued: {resp.asset.asset_id}")
             output_model(resp, title="Issued Asset")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @asset_app.command(
@@ -829,8 +722,7 @@ async def _asset_sync() -> None:
         await client.rln.sync_rgb_wallet()
         print_success("RGB wallet synced.")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @asset_app.command(
@@ -879,8 +771,7 @@ async def _asset_fail_transfers(
             changed = "yes" if resp.transfers_changed else "no"
             print_success(f"Done. Transfers changed: {changed}")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @asset_app.command(
@@ -914,5 +805,4 @@ async def _asset_media(digest: str) -> None:
         else:
             output_model(resp, title=f"Asset Media — {digest[:20]}…")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)

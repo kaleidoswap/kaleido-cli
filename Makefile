@@ -28,7 +28,7 @@ format:
 	uvx ruff format .
 
 typecheck:
-	uvx --with . pyright .
+	uvx --with '.[dev]' pyright .
 
 fix: format lint
 

@@ -42,6 +42,7 @@ from kaleido_cli.output import (
     print_success,
     print_warning,
 )
+from kaleido_cli.utils.errors import raise_cli_error
 
 node_app = typer.Typer(
     no_args_is_help=True,
@@ -393,8 +394,7 @@ async def _node_shutdown() -> None:
         await client.rln.shutdown()
         print_success("Node shutdown initiated.")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @node_app.command(
@@ -507,8 +507,7 @@ async def _node_info() -> None:
         info = await client.rln.get_node_info()
         output_model(info, title="Node Info")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @node_app.command("network")
@@ -523,8 +522,7 @@ async def _node_network() -> None:
         net = await client.rln.get_network_info()
         output_model(net, title="Network Info")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @node_app.command(
@@ -768,5 +766,4 @@ async def _node_lock() -> None:
         await client.rln.lock_wallet()
         print_success("Wallet locked.")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)

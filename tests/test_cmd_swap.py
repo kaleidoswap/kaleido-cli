@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from kaleido_sdk import Layer, SwapLeg
+
 from kaleido_cli.app import app
 
 # ---------------------------------------------------------------------------
@@ -39,8 +41,22 @@ def _pairs_resp(pairs=None):
 def _quote(rfq_id="rfq-1"):
     m = MagicMock()
     m.rfq_id = rfq_id
-    m.from_asset = MagicMock(asset_id="BTC", amount=100000)
-    m.to_asset = MagicMock(asset_id="rgb:usdt", amount=500)
+    m.from_asset = SwapLeg(
+        asset_id="BTC",
+        name="Bitcoin",
+        ticker="BTC",
+        layer=Layer.BTC_LN,
+        amount=100000,
+        precision=8,
+    )
+    m.to_asset = SwapLeg(
+        asset_id="rgb:usdt",
+        name="Tether",
+        ticker="USDT",
+        layer=Layer.RGB_LN,
+        amount=500,
+        precision=6,
+    )
     m.model_dump.return_value = {"rfq_id": rfq_id}
     return m
 
@@ -62,6 +78,38 @@ def _confirm_resp():
     m = MagicMock()
     m.model_dump.return_value = {"status": "ok"}
     return m
+
+
+# ---------------------------------------------------------------------------
+# swap order create
+# ---------------------------------------------------------------------------
+
+
+def test_swap_order_create_uses_live_pair_catalog(runner, mock_client):
+    mock_client.maker.list_pairs.return_value = _pairs_resp()
+    mock_client.maker.get_quote.return_value = _quote()
+    mock_client.maker.create_swap_order.return_value = _order()
+
+    result = runner.invoke(
+        app,
+        [
+            "swap",
+            "order",
+            "create",
+            "BTC/USDT",
+            "--to-amount",
+            "5",
+            "--receiver-address",
+            "lnbcrt1invoice",
+            "--receiver-format",
+            "BOLT11",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_client.maker.list_pairs.assert_awaited_once()
+    mock_client.maker.get_quote.assert_awaited_once()
+    mock_client.maker.create_swap_order.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------
@@ -112,8 +160,59 @@ def test_swap_atomic_init_pair_not_found_exits_1(runner, mock_client):
 
 
 def test_swap_atomic_init_no_pair_agent_mode_exits_1(runner, mock_client):
+    mock_client.maker.list_pairs.return_value = _pairs_resp()
     result = runner.invoke(app, ["--agent", "swap", "atomic", "init", "--from-amount", "100"])
     assert result.exit_code != 0
+
+
+def test_swap_atomic_init_fetches_pairs_before_interactive_selection(runner, mock_client, mocker):
+    mocker.patch("kaleido_cli.commands.swap.is_interactive", return_value=True)
+    mocker.patch("kaleido_cli.utils.pairs.is_interactive", return_value=True)
+    mocker.patch("kaleido_cli.utils.quotes.is_interactive", return_value=True)
+    mocker.patch("kaleido_cli.utils.prompts.is_interactive", return_value=True)
+    mock_client.maker.list_pairs.return_value = _pairs_resp()
+    mock_client.maker.get_quote.return_value = _quote()
+    mock_client.maker.init_swap.return_value = _swap_resp()
+
+    result = runner.invoke(
+        app,
+        ["swap", "atomic", "init", "--to-amount", "5", "--yes"],
+        input="2\n",
+    )
+
+    assert result.exit_code == 0
+    assert "Fetching available trading pairs" in result.output
+    assert "1. BTC/USDT" in result.output
+    assert "2. USDT/BTC (reverse)" in result.output
+    assert "Select trading pair number" in result.output
+    request = mock_client.maker.get_quote.await_args.args[0]
+    assert request.from_asset.asset_id == "rgb:usdt"
+    assert request.to_asset.asset_id == "BTC"
+
+
+def test_swap_atomic_init_prompts_for_selected_source_amount(runner, mock_client, mocker):
+    mocker.patch("kaleido_cli.commands.swap.is_interactive", return_value=True)
+    mocker.patch("kaleido_cli.utils.pairs.is_interactive", return_value=True)
+    mocker.patch("kaleido_cli.utils.quotes.is_interactive", return_value=True)
+    mocker.patch("kaleido_cli.utils.prompts.is_interactive", return_value=True)
+    mock_client.maker.list_pairs.return_value = _pairs_resp()
+    mock_client.maker.get_quote.return_value = _quote()
+    mock_client.maker.init_swap.return_value = _swap_resp()
+
+    result = runner.invoke(
+        app,
+        ["swap", "atomic", "init", "--yes"],
+        input="2\n5\n",
+    )
+
+    assert result.exit_code == 0
+    assert "Swap amount (USDT, display units)" in result.output
+    assert "send amount or" not in result.output
+    request = mock_client.maker.get_quote.await_args.args[0]
+    assert request.from_asset.asset_id == "rgb:usdt"
+    assert request.from_asset.amount == 5_000_000
+    assert request.to_asset.asset_id == "BTC"
+    assert request.to_asset.amount is None
 
 
 def test_swap_atomic_init_json(runner, mock_client):

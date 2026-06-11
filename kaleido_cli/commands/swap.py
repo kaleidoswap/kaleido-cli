@@ -7,26 +7,20 @@ from typing import Annotated
 
 import typer
 from kaleido_sdk import (
-    ConfirmSwapRequest,
     ConfirmSwapResponse,
     CreateSwapOrderRequest,
     CreateSwapOrderResponse,
-    Layer,
     OrderHistoryResponse,
-    PairQuoteRequest,
     PairQuoteResponse,
     ReceiverAddress,
     ReceiverAddressFormat,
-    SwapLegInput,
     SwapOrderRateDecisionRequest,
     SwapOrderRateDecisionResponse,
     SwapOrderStatusRequest,
     SwapOrderStatusResponse,
-    SwapRequest,
     SwapResponse,
     SwapStatusRequest,
     SwapStatusResponse,
-    TradingPairsResponse,
 )
 from kaleido_sdk.rln import (
     TakerRequest,
@@ -43,20 +37,13 @@ from kaleido_cli.output import (
     print_json,
     print_success,
 )
-from kaleido_cli.utils.pairs import (
-    pair_assets,
-    resolve_asset_id_for_layer,
-    resolve_quote_layers,
-    resolve_trading_pair,
-)
-from kaleido_cli.utils.prompts import (
-    display_amount_to_raw,
-    resolve_amount_pair,
-    resolve_pair,
-    resolve_required_text,
-)
+from kaleido_cli.utils.errors import raise_cli_error
+from kaleido_cli.utils.prompts import resolve_accept_reject, resolve_required_text
+from kaleido_cli.utils.quotes import resolve_and_fetch_quote
 from kaleido_cli.utils.swaps import (
+    confirm_swap_request,
     decode_swapstring,
+    swap_request_from_quote,
     validate_swapstring_against_quote,
     validate_swapstring_against_swap,
 )
@@ -84,15 +71,6 @@ swap_app.add_typer(order_app, name="order")
 swap_app.add_typer(atomic_app, name="atomic")
 
 
-def _resolve_accept_reject(accept: bool, reject: bool, prompt: str) -> bool:
-    if is_interactive() and not accept and not reject:
-        return typer.confirm(prompt, default=False)
-    if accept == reject:
-        print_error("Must specify exactly one of --accept or --reject")
-        raise typer.Exit(1)
-    return accept
-
-
 def _confirm_quote_or_exit(quote: PairQuoteResponse, *, title: str, yes: bool) -> None:
     """Show a quote and require explicit acceptance before continuing."""
     if is_json_mode():
@@ -114,64 +92,6 @@ def _confirm_quote_or_exit(quote: PairQuoteResponse, *, title: str, yes: bool) -
     if not yes:
         print_error("--yes is required in non-interactive mode to accept the quoted price.")
         raise typer.Exit(1)
-
-
-async def _fetch_quote(
-    pair: str,
-    from_amount: str | None,
-    to_amount: str | None,
-    from_layer: str,
-    to_layer: str,
-) -> PairQuoteResponse:
-    client = get_client()
-    pairs: TradingPairsResponse = await client.maker.list_pairs()
-    resolved_pair = resolve_trading_pair(pairs.pairs, pair)
-    if not resolved_pair:
-        print_error(f"Pair {pair!r} not found.")
-        raise typer.Exit(1)
-    matched_pair, is_reversed = resolved_pair
-    from_asset, to_asset = pair_assets(matched_pair, is_reversed)
-    try:
-        from_asset_id = resolve_asset_id_for_layer(from_asset, from_layer)
-        to_asset_id = resolve_asset_id_for_layer(to_asset, to_layer)
-    except ValueError as exc:
-        print_error(str(exc))
-        raise typer.Exit(1)
-
-    resolved_from_amount = (
-        display_amount_to_raw(
-            from_amount,
-            precision=from_asset.precision,
-            asset_label=from_asset.ticker,
-            option_name="--from-amount",
-        )
-        if from_amount is not None
-        else None
-    )
-    resolved_to_amount = (
-        display_amount_to_raw(
-            to_amount,
-            precision=to_asset.precision,
-            asset_label=to_asset.ticker,
-            option_name="--to-amount",
-        )
-        if to_amount is not None
-        else None
-    )
-
-    body = PairQuoteRequest(
-        from_asset=SwapLegInput(
-            asset_id=from_asset_id,
-            layer=Layer(from_layer),
-            amount=resolved_from_amount,
-        ),
-        to_asset=SwapLegInput(
-            asset_id=to_asset_id,
-            layer=Layer(to_layer),
-            amount=resolved_to_amount,
-        ),
-    )
-    return await client.maker.get_quote(body)
 
 
 @order_app.command(
@@ -241,30 +161,15 @@ def order_create(
     ] = None,
 ) -> None:
     """Create a maker swap order from a live quote."""
-    resolved_pair = resolve_pair(pair)
-    resolved_from_amount, resolved_to_amount = resolve_amount_pair(
-        from_amount, to_amount, prompt_prefix="Order", default_choice="R", pair=resolved_pair
-    )
-    resolved_from_layer, resolved_to_layer = resolve_quote_layers(
-        resolved_pair, from_layer, to_layer
-    )
-    resolved_receiver_address = resolve_required_text(
-        receiver_address, "Receiver address / invoice", "--receiver-address"
-    )
-    resolved_receiver_format = resolve_required_text(
-        receiver_format,
-        "Receiver format (e.g. BOLT11, RGB_INVOICE, BTC_ADDRESS)",
-        "--receiver-format",
-    )
     asyncio.run(
         _order_create(
-            resolved_pair,
-            resolved_from_amount,
-            resolved_to_amount,
-            resolved_from_layer,
-            resolved_to_layer,
-            resolved_receiver_address,
-            resolved_receiver_format,
+            pair,
+            from_amount,
+            to_amount,
+            from_layer,
+            to_layer,
+            receiver_address,
+            receiver_format,
             min_onchain_conf,
             refund_address,
             email,
@@ -273,27 +178,52 @@ def order_create(
 
 
 async def _order_create(
-    pair: str,
+    pair: str | None,
     from_amount: str | None,
     to_amount: str | None,
-    from_layer: str,
-    to_layer: str,
-    receiver_address: str,
-    receiver_format: str,
+    from_layer: str | None,
+    to_layer: str | None,
+    receiver_address: str | None,
+    receiver_format: str | None,
     min_onchain_conf: int,
     refund_address: str | None,
     email: str | None,
 ) -> None:
     try:
         client = get_client()
-        quote = await _fetch_quote(pair, from_amount, to_amount, from_layer, to_layer)
+
+        if not is_interactive():
+            if receiver_address is None:
+                print_error("--receiver-address is required in non-interactive mode.")
+                raise typer.Exit(1)
+            if receiver_format is None:
+                print_error("--receiver-format is required in non-interactive mode.")
+                raise typer.Exit(1)
+
+        resolved_quote = await resolve_and_fetch_quote(
+            client,
+            pair=pair,
+            from_amount=from_amount,
+            to_amount=to_amount,
+            from_layer=from_layer,
+            to_layer=to_layer,
+        )
+        resolved_receiver_address = resolve_required_text(
+            receiver_address, "Receiver address / invoice", "--receiver-address"
+        )
+        resolved_receiver_format = resolve_required_text(
+            receiver_format,
+            "Receiver format (e.g. BOLT11, RGB_INVOICE, BTC_ADDRESS)",
+            "--receiver-format",
+        )
+        quote = resolved_quote.quote
         body = CreateSwapOrderRequest(
             rfq_id=quote.rfq_id,
             from_asset=quote.from_asset,
             to_asset=quote.to_asset,
             receiver_address=ReceiverAddress(
-                address=receiver_address,
-                format=ReceiverAddressFormat(receiver_format),
+                address=resolved_receiver_address,
+                format=ReceiverAddressFormat(resolved_receiver_format),
             ),
             min_onchain_conf=min_onchain_conf,
             refund_address=refund_address,
@@ -305,9 +235,10 @@ async def _order_create(
         else:
             print_success(f"Swap order created: {resp.id}")
             output_model(resp, title="Swap Order")
+    except typer.Exit:
+        raise
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @order_app.command(
@@ -333,7 +264,7 @@ def order_decide(
 ) -> None:
     """Submit a rate decision for a pending maker swap order."""
     resolved_order_id = resolve_required_text(order_id, "Swap order ID", "ORDER_ID argument")
-    accept_new_rate = _resolve_accept_reject(accept, reject, "Accept the new quoted rate?")
+    accept_new_rate = resolve_accept_reject(accept, reject, "Accept the new quoted rate?")
     asyncio.run(_order_decide(resolved_order_id, accept_new_rate, access_token))
 
 
@@ -350,8 +281,7 @@ async def _order_decide(order_id: str, accept: bool, access_token: str) -> None:
             print_success(f"Swap order {order_id} {'accepted' if accept else 'rejected'}")
             output_model(resp, title="Swap Rate Decision")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @order_app.command(
@@ -380,8 +310,7 @@ async def _order_status(order_id: str, access_token: str) -> None:
         else:
             output_model(resp, title=f"Swap Order — {order_id[:16]}…")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @order_app.command(
@@ -431,8 +360,7 @@ async def _order_history(status: str | None, limit: int) -> None:
             item_title="Swap Order — {index}",
         )
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @atomic_app.command(
@@ -491,49 +419,39 @@ def atomic_init(
     ] = False,
 ) -> None:
     """Initialize an atomic swap against the maker server using a live quote."""
-    resolved_pair = resolve_pair(pair)
-    resolved_from_amount, resolved_to_amount = resolve_amount_pair(
-        from_amount,
-        to_amount,
-        prompt_prefix="Atomic swap",
-        default_choice="R",
-        pair=resolved_pair,
-    )
-    resolved_from_layer, resolved_to_layer = resolve_quote_layers(
-        resolved_pair, from_layer, to_layer
-    )
     asyncio.run(
         _atomic_init(
-            resolved_pair,
-            resolved_from_amount,
-            resolved_to_amount,
-            resolved_from_layer,
-            resolved_to_layer,
+            pair,
+            from_amount,
+            to_amount,
+            from_layer,
+            to_layer,
             yes,
         )
     )
 
 
 async def _atomic_init(
-    pair: str,
+    pair: str | None,
     from_amount: str | None,
     to_amount: str | None,
-    from_layer: str,
-    to_layer: str,
+    from_layer: str | None,
+    to_layer: str | None,
     yes: bool,
 ) -> None:
     try:
         client = get_client()
-        quote = await _fetch_quote(pair, from_amount, to_amount, from_layer, to_layer)
-        _confirm_quote_or_exit(quote, title=f"Quote — {pair.upper()}", yes=yes)
-        body = SwapRequest(
-            rfq_id=quote.rfq_id,
-            from_asset=quote.from_asset.asset_id,
-            from_amount=quote.from_asset.amount,
-            to_asset=quote.to_asset.asset_id,
-            to_amount=quote.to_asset.amount,
+        resolved_quote = await resolve_and_fetch_quote(
+            client,
+            pair=pair,
+            from_amount=from_amount,
+            to_amount=to_amount,
+            from_layer=from_layer,
+            to_layer=to_layer,
         )
-        resp: SwapResponse = await client.maker.init_swap(body)
+        quote = resolved_quote.quote
+        _confirm_quote_or_exit(quote, title=f"Quote — {resolved_quote.inputs.pair}", yes=yes)
+        resp: SwapResponse = await client.maker.init_swap(swap_request_from_quote(quote))
         if is_json_mode():
             print_json(resp.model_dump())
         else:
@@ -555,9 +473,10 @@ async def _atomic_init(
                 f"  kaleido swap atomic execute --auto-whitelist --swapstring '{resp.swapstring}' "
                 f"--taker-pubkey <pubkey> --payment-hash {resp.payment_hash}"
             )
+    except typer.Exit:
+        raise
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @atomic_app.command(
@@ -636,7 +555,7 @@ async def _atomic_execute(
                 raise typer.Exit(1)
             await client.rln.whitelist_swap(TakerRequest(swapstring=swapstring))
         resp: ConfirmSwapResponse = await client.maker.execute_swap(
-            ConfirmSwapRequest(
+            confirm_swap_request(
                 swapstring=swapstring,
                 taker_pubkey=taker_pubkey,
                 payment_hash=payment_hash,
@@ -650,8 +569,7 @@ async def _atomic_execute(
             print_success("Atomic swap execution submitted")
             output_model(resp, title="Atomic Swap Execute")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @atomic_app.command(
@@ -676,8 +594,7 @@ async def _atomic_status(payment_hash: str) -> None:
         else:
             output_model(resp, title=f"Atomic Swap — {payment_hash[:16]}…")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @atomic_app.command(
@@ -740,24 +657,13 @@ def atomic_run(
     ] = False,
 ) -> None:
     """Run an atomic swap end-to-end using the local node as taker."""
-    resolved_pair = resolve_pair(pair)
-    resolved_from_amount, resolved_to_amount = resolve_amount_pair(
-        from_amount,
-        to_amount,
-        prompt_prefix="Atomic swap",
-        default_choice="R",
-        pair=resolved_pair,
-    )
-    resolved_from_layer, resolved_to_layer = resolve_quote_layers(
-        resolved_pair, from_layer, to_layer
-    )
     asyncio.run(
         _atomic_run(
-            resolved_pair,
-            resolved_from_amount,
-            resolved_to_amount,
-            resolved_from_layer,
-            resolved_to_layer,
+            pair,
+            from_amount,
+            to_amount,
+            from_layer,
+            to_layer,
             taker_pubkey,
             yes,
         )
@@ -765,27 +671,27 @@ def atomic_run(
 
 
 async def _atomic_run(
-    pair: str,
+    pair: str | None,
     from_amount: str | None,
     to_amount: str | None,
-    from_layer: str,
-    to_layer: str,
+    from_layer: str | None,
+    to_layer: str | None,
     taker_pubkey_override: str | None,
     yes: bool,
 ) -> None:
     try:
         client = get_client(require_node=True)
-        quote = await _fetch_quote(pair, from_amount, to_amount, from_layer, to_layer)
-        _confirm_quote_or_exit(quote, title=f"Quote — {pair.upper()}", yes=yes)
-        init_resp: SwapResponse = await client.maker.init_swap(
-            SwapRequest(
-                rfq_id=quote.rfq_id,
-                from_asset=quote.from_asset.asset_id,
-                from_amount=quote.from_asset.amount,
-                to_asset=quote.to_asset.asset_id,
-                to_amount=quote.to_asset.amount,
-            )
+        resolved_quote = await resolve_and_fetch_quote(
+            client,
+            pair=pair,
+            from_amount=from_amount,
+            to_amount=to_amount,
+            from_layer=from_layer,
+            to_layer=to_layer,
         )
+        quote = resolved_quote.quote
+        _confirm_quote_or_exit(quote, title=f"Quote — {resolved_quote.inputs.pair}", yes=yes)
+        init_resp: SwapResponse = await client.maker.init_swap(swap_request_from_quote(quote))
         decoded_swap = decode_swapstring(init_resp.swapstring)
         validate_swapstring_against_quote(
             decoded_swap,
@@ -805,7 +711,7 @@ async def _atomic_run(
 
         await client.rln.whitelist_swap(TakerRequest(swapstring=init_resp.swapstring))
         execute_resp: ConfirmSwapResponse = await client.maker.execute_swap(
-            ConfirmSwapRequest(
+            confirm_swap_request(
                 swapstring=init_resp.swapstring,
                 taker_pubkey=resolved_taker_pubkey,
                 payment_hash=init_resp.payment_hash,
@@ -836,5 +742,4 @@ async def _atomic_run(
     except typer.Exit:
         raise
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)

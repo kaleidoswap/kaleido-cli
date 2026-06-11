@@ -49,7 +49,14 @@ from kaleido_cli.utils.channel_orders import (
     _resolve_channel_order_params,
     _timed_step,
 )
-from kaleido_cli.utils.prompts import resolve_optional_text, resolve_required_text
+from kaleido_cli.utils.errors import raise_cli_error
+from kaleido_cli.utils.prompts import (
+    require_option_when_set,
+    resolve_accept_reject,
+    resolve_optional_text,
+    resolve_required_int,
+    resolve_required_text,
+)
 
 
 def _resolve_channel_order_payment_method(onchain: bool, offchain: bool) -> str:
@@ -113,8 +120,7 @@ async def _channel_list() -> None:
             empty_msg="No channels.",
         )
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @channel_app.command(
@@ -192,27 +198,17 @@ def channel_open(
     ] = None,
 ) -> None:
     """Open a Lightning channel to a peer."""
-    if (asset_amount is not None or push_asset_amount is not None) and asset_id is None:
-        print_error("--asset-amount and --push-asset-amount require --asset-id.")
-        raise typer.Exit(1)
+    require_option_when_set(
+        asset_id,
+        "--asset-id",
+        **{
+            "--asset-amount": asset_amount,
+            "--push-asset-amount": push_asset_amount,
+        },
+    )
 
-    resolved_peer: str
-    if peer is not None:
-        resolved_peer = peer
-    elif is_interactive():
-        resolved_peer = typer.prompt("Peer (pubkey@host:port)")
-    else:
-        print_error("PEER argument is required in non-interactive mode.")
-        raise typer.Exit(1)
-
-    resolved_capacity: int
-    if capacity is not None:
-        resolved_capacity = capacity
-    elif is_interactive():
-        resolved_capacity = typer.prompt("Channel capacity (satoshis)", type=int)
-    else:
-        print_error("--capacity is required in non-interactive mode.")
-        raise typer.Exit(1)
+    resolved_peer = resolve_required_text(peer, "Peer (pubkey@host:port)", "PEER argument")
+    resolved_capacity = resolve_required_int(capacity, "Channel capacity (satoshis)", "--capacity")
 
     if is_interactive():
         push_msat = typer.prompt("[OPTIONAL] Push msat to remote side", default=push_msat, type=int)
@@ -287,8 +283,7 @@ async def _channel_open(
                 f"Channel opening initiated. Temporary channel ID: {resp.temporary_channel_id}"
             )
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @channel_app.command(
@@ -317,23 +312,12 @@ def channel_close(
     ] = False,
 ) -> None:
     """Close a Lightning channel."""
-    resolved_channel_id: str
-    if channel_id is not None:
-        resolved_channel_id = channel_id
-    elif is_interactive():
-        resolved_channel_id = typer.prompt("Channel ID (from 'kaleido channel list')")
-    else:
-        print_error("CHANNEL_ID argument is required in non-interactive mode.")
-        raise typer.Exit(1)
-
-    resolved_peer_pubkey: str
-    if peer_pubkey is not None:
-        resolved_peer_pubkey = peer_pubkey
-    elif is_interactive():
-        resolved_peer_pubkey = typer.prompt("Peer pubkey")
-    else:
-        print_error("--peer is required in non-interactive mode.")
-        raise typer.Exit(1)
+    resolved_channel_id = resolve_required_text(
+        channel_id,
+        "Channel ID (from 'kaleido channel list')",
+        "CHANNEL_ID argument",
+    )
+    resolved_peer_pubkey = resolve_required_text(peer_pubkey, "Peer pubkey", "--peer")
 
     asyncio.run(_channel_close(resolved_channel_id, resolved_peer_pubkey, force))
 
@@ -350,8 +334,7 @@ async def _channel_close(channel_id: str, peer_pubkey: str, force: bool) -> None
         )
         print_success("Channel close initiated.")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 # ---------------------------------------------------------------------------
@@ -520,8 +503,7 @@ async def _channel_order_create_flow(
     except typer.Exit:
         raise
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @order_app.command(
@@ -555,8 +537,7 @@ async def _channel_order_get(order_id: str, access_token: str) -> None:
         else:
             output_model(resp, title=f"Order {order_id}")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @order_app.command(
@@ -708,8 +689,7 @@ async def _channel_order_pay(
     except typer.Exit:
         raise
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @order_app.command(
@@ -732,21 +712,9 @@ def channel_order_decide(
     ] = "",
 ) -> None:
     """Submit a rate decision for an LSP channel order."""
-    resolved_order_id: str
-    if order_id is not None:
-        resolved_order_id = order_id
-    elif is_interactive():
-        resolved_order_id = typer.prompt("LSP order ID")
-    else:
-        print_error("ORDER_ID argument is required in non-interactive mode.")
-        raise typer.Exit(1)
+    resolved_order_id = resolve_required_text(order_id, "LSP order ID", "ORDER_ID argument")
 
-    if is_interactive() and not accept and not reject:
-        accept = typer.confirm("Accept this order?", default=False)
-        reject = not accept
-    elif accept == reject:
-        print_error("Must specify exactly one of --accept or --reject")
-        raise typer.Exit(1)
+    accept = resolve_accept_reject(accept, reject, "Accept this order?")
 
     resolved_access_token = resolve_optional_text(access_token, "Access token")
 
@@ -769,8 +737,7 @@ async def _channel_order_decide(order_id: str, accept: bool, access_token: str) 
             print_success(f"Order {order_id} {action}")
             output_model(resp, title="Rate Decision Response")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @order_app.command(
@@ -843,8 +810,7 @@ async def _channel_estimate_fees_flow(params) -> None:
     except typer.Exit:
         raise
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @lsp_app.command(
@@ -865,8 +831,7 @@ async def _channel_lsp_info() -> None:
         else:
             _print_lsp_info(resp)
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
 
 
 @lsp_app.command(
@@ -887,5 +852,4 @@ async def _channel_lsp_network_info() -> None:
         else:
             output_model(resp, title="LSP Network Info")
     except Exception as e:
-        print_error(f"Error: {e}")
-        raise typer.Exit(1)
+        raise_cli_error(e)
