@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kaleido-cli"
-version = "0.1.0"
+version = "0.1.1"
 description = "CLI for managing RGB Lightning Nodes and interacting with Kaleidoswap"
 readme = "README.md"
 license = "MIT"

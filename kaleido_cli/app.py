@@ -195,7 +195,7 @@ app.add_typer(
 app.add_typer(
     swap_app,
     name="swap",
-    help="Swap flows grouped by scope: maker order flow and maker atomic flow.",
+    help="Atomic swap flow against the Kaleidoswap maker server, using your local node as taker.",
 )
 app.add_typer(config_app, name="config", help="CLI configuration stored in ~/.kaleido/config.json.")
 
