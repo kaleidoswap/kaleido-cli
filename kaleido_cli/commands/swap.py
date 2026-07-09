@@ -1,4 +1,4 @@
-"""Swap order and atomic swap commands."""
+"""Atomic swap commands."""
 
 from __future__ import annotations
 
@@ -8,16 +8,7 @@ from typing import Annotated
 import typer
 from kaleido_sdk import (
     ConfirmSwapResponse,
-    CreateSwapOrderRequest,
-    CreateSwapOrderResponse,
-    OrderHistoryResponse,
     PairQuoteResponse,
-    ReceiverAddress,
-    ReceiverAddressFormat,
-    SwapOrderRateDecisionRequest,
-    SwapOrderRateDecisionResponse,
-    SwapOrderStatusRequest,
-    SwapOrderStatusResponse,
     SwapResponse,
     SwapStatusRequest,
     SwapStatusResponse,
@@ -30,7 +21,6 @@ from kaleido_cli.context import get_client
 from kaleido_cli.output import (
     is_interactive,
     is_json_mode,
-    output_collection,
     output_model,
     print_error,
     print_info,
@@ -38,7 +28,7 @@ from kaleido_cli.output import (
     print_success,
 )
 from kaleido_cli.utils.errors import raise_cli_error
-from kaleido_cli.utils.prompts import resolve_accept_reject, resolve_required_text
+from kaleido_cli.utils.prompts import resolve_required_text
 from kaleido_cli.utils.quotes import resolve_and_fetch_quote
 from kaleido_cli.utils.swaps import (
     confirm_swap_request,
@@ -52,14 +42,9 @@ swap_app = typer.Typer(
     no_args_is_help=True,
     rich_markup_mode="rich",
     help=(
-        "Swap operations grouped by scope: maker order and maker atomic flow.\n\n"
+        "Atomic swap flow against the Kaleidoswap maker server, using your local node as taker.\n\n"
         "For low-level local node swaps, use [cyan]kaleido node swap ...[/cyan]."
     ),
-)
-order_app = typer.Typer(
-    no_args_is_help=True,
-    rich_markup_mode="rich",
-    help="Maker swap-order flow via the Kaleidoswap server.",
 )
 atomic_app = typer.Typer(
     no_args_is_help=True,
@@ -67,7 +52,6 @@ atomic_app = typer.Typer(
     help="Atomic swap flow against the Kaleidoswap maker server, using your local node as taker.",
 )
 
-swap_app.add_typer(order_app, name="order")
 swap_app.add_typer(atomic_app, name="atomic")
 
 
@@ -92,275 +76,6 @@ def _confirm_quote_or_exit(quote: PairQuoteResponse, *, title: str, yes: bool) -
     if not yes:
         print_error("--yes is required in non-interactive mode to accept the quoted price.")
         raise typer.Exit(1)
-
-
-@order_app.command(
-    "create",
-    epilog=(
-        "[bold]Examples[/bold]\n\n"
-        "  Swap sats for 5 USDT over RGB Lightning:\n"
-        "  [cyan]kaleido swap order create BTC/USDT --to-amount 5 "
-        "--receiver-address lnbcrt... --receiver-format BOLT11[/cyan]\n\n"
-        "  Swap onchain BTC into an RGB invoice:\n"
-        "  [cyan]kaleido swap order create BTC/USDT --to-amount 5 "
-        "--from-layer BTC_L1 --to-layer RGB_L1 --receiver-address rgb:... "
-        "--receiver-format RGB_INVOICE[/cyan]"
-    ),
-)
-def order_create(
-    pair: Annotated[
-        str | None, typer.Argument(help="Trading pair in BASE/QUOTE format, e.g. BTC/USDT.")
-    ] = None,
-    from_amount: Annotated[
-        str | None,
-        typer.Option(
-            "--from-amount",
-            help="Amount to send in display units. Provide this OR --to-amount.",
-        ),
-    ] = None,
-    to_amount: Annotated[
-        str | None,
-        typer.Option(
-            "--to-amount",
-            help="Amount to receive in display units. Provide this OR --from-amount.",
-        ),
-    ] = None,
-    from_layer: Annotated[
-        str | None,
-        typer.Option(
-            "--from-layer",
-            help="Source layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN. Defaults from the requested pair direction.",
-        ),
-    ] = None,
-    to_layer: Annotated[
-        str | None,
-        typer.Option(
-            "--to-layer",
-            help="Destination layer: BTC_L1, BTC_LN, RGB_L1, RGB_LN. Defaults from the requested pair direction.",
-        ),
-    ] = None,
-    receiver_address: Annotated[
-        str | None,
-        typer.Option(
-            "--receiver-address", help="Destination address/invoice for receiving the payout."
-        ),
-    ] = None,
-    receiver_format: Annotated[
-        str | None,
-        typer.Option("--receiver-format", help="Receiver format, e.g. BOLT11 or RGB_INVOICE."),
-    ] = None,
-    min_onchain_conf: Annotated[
-        int, typer.Option("--min-onchain-conf", help="Minimum confirmations for onchain deposits.")
-    ] = 1,
-    refund_address: Annotated[
-        str | None,
-        typer.Option("--refund-address", help="Optional refund address for onchain deposits."),
-    ] = None,
-    email: Annotated[
-        str | None, typer.Option("--email", help="Optional email for order notifications.")
-    ] = None,
-) -> None:
-    """Create a maker swap order from a live quote."""
-    asyncio.run(
-        _order_create(
-            pair,
-            from_amount,
-            to_amount,
-            from_layer,
-            to_layer,
-            receiver_address,
-            receiver_format,
-            min_onchain_conf,
-            refund_address,
-            email,
-        )
-    )
-
-
-async def _order_create(
-    pair: str | None,
-    from_amount: str | None,
-    to_amount: str | None,
-    from_layer: str | None,
-    to_layer: str | None,
-    receiver_address: str | None,
-    receiver_format: str | None,
-    min_onchain_conf: int,
-    refund_address: str | None,
-    email: str | None,
-) -> None:
-    try:
-        client = get_client()
-
-        if not is_interactive():
-            if receiver_address is None:
-                print_error("--receiver-address is required in non-interactive mode.")
-                raise typer.Exit(1)
-            if receiver_format is None:
-                print_error("--receiver-format is required in non-interactive mode.")
-                raise typer.Exit(1)
-
-        resolved_quote = await resolve_and_fetch_quote(
-            client,
-            pair=pair,
-            from_amount=from_amount,
-            to_amount=to_amount,
-            from_layer=from_layer,
-            to_layer=to_layer,
-        )
-        resolved_receiver_address = resolve_required_text(
-            receiver_address, "Receiver address / invoice", "--receiver-address"
-        )
-        resolved_receiver_format = resolve_required_text(
-            receiver_format,
-            "Receiver format (e.g. BOLT11, RGB_INVOICE, BTC_ADDRESS)",
-            "--receiver-format",
-        )
-        quote = resolved_quote.quote
-        body = CreateSwapOrderRequest(
-            rfq_id=quote.rfq_id,
-            from_asset=quote.from_asset,
-            to_asset=quote.to_asset,
-            receiver_address=ReceiverAddress(
-                address=resolved_receiver_address,
-                format=ReceiverAddressFormat(resolved_receiver_format),
-            ),
-            min_onchain_conf=min_onchain_conf,
-            refund_address=refund_address,
-            email=email,
-        )
-        resp: CreateSwapOrderResponse = await client.maker.create_swap_order(body)
-        if is_json_mode():
-            print_json(resp.model_dump())
-        else:
-            print_success(f"Swap order created: {resp.id}")
-            output_model(resp, title="Swap Order")
-    except typer.Exit:
-        raise
-    except Exception as e:
-        raise_cli_error(e)
-
-
-@order_app.command(
-    "decide",
-    epilog=(
-        "[bold]Examples[/bold]\n\n"
-        "  Accept a requoted swap order:\n"
-        "  [cyan]kaleido swap order decide <order-id> --accept[/cyan]\n\n"
-        "  Reject the new rate and request refund:\n"
-        "  [cyan]kaleido swap order decide <order-id> --reject[/cyan]"
-    ),
-)
-def order_decide(
-    order_id: Annotated[str | None, typer.Argument(help="Swap order ID.")] = None,
-    accept: Annotated[bool, typer.Option("--accept", help="Accept the new quoted rate.")] = False,
-    reject: Annotated[
-        bool, typer.Option("--reject", help="Reject the new quoted rate and request refund.")
-    ] = False,
-    access_token: Annotated[
-        str,
-        typer.Option("--access-token", help="Optional access token returned for the swap order."),
-    ] = "",
-) -> None:
-    """Submit a rate decision for a pending maker swap order."""
-    resolved_order_id = resolve_required_text(order_id, "Swap order ID", "ORDER_ID argument")
-    accept_new_rate = resolve_accept_reject(accept, reject, "Accept the new quoted rate?")
-    asyncio.run(_order_decide(resolved_order_id, accept_new_rate, access_token))
-
-
-async def _order_decide(order_id: str, accept: bool, access_token: str) -> None:
-    try:
-        client = get_client()
-        body = SwapOrderRateDecisionRequest(
-            order_id=order_id, access_token=access_token, accept_new_rate=accept
-        )
-        resp: SwapOrderRateDecisionResponse = await client.maker.submit_rate_decision(body)
-        if is_json_mode():
-            print_json(resp.model_dump())
-        else:
-            print_success(f"Swap order {order_id} {'accepted' if accept else 'rejected'}")
-            output_model(resp, title="Swap Rate Decision")
-    except Exception as e:
-        raise_cli_error(e)
-
-
-@order_app.command(
-    "status",
-    epilog="  [cyan]kaleido swap order status <order-id>[/cyan]   Use 'kaleido swap order history' to find order IDs.",
-)
-def order_status(
-    order_id: Annotated[str, typer.Argument(help="Full swap order ID to look up.")],
-    access_token: Annotated[
-        str,
-        typer.Option("--access-token", help="Optional access token returned for the swap order."),
-    ] = "",
-) -> None:
-    """Check the status of a maker swap order."""
-    asyncio.run(_order_status(order_id, access_token))
-
-
-async def _order_status(order_id: str, access_token: str) -> None:
-    try:
-        client = get_client()
-        resp: SwapOrderStatusResponse = await client.maker.get_swap_order_status(
-            SwapOrderStatusRequest(order_id=order_id, access_token=access_token)
-        )
-        if is_json_mode():
-            print_json(resp.model_dump())
-        else:
-            output_model(resp, title=f"Swap Order — {order_id[:16]}…")
-    except Exception as e:
-        raise_cli_error(e)
-
-
-@order_app.command(
-    "history",
-    epilog=(
-        "[bold]Examples[/bold]\n\n"
-        "  All history:\n"
-        "  [cyan]kaleido swap order history[/cyan]\n\n"
-        "  Only failed swaps:\n"
-        "  [cyan]kaleido swap order history --status FAILED[/cyan]\n\n"
-        "  Limit to most recent 5:\n"
-        "  [cyan]kaleido swap order history --limit 5[/cyan]\n\n"
-        "[bold]Status values[/bold]: [green]OPEN[/green]  [green]PENDING_PAYMENT[/green]  "
-        "[green]PAID[/green]  [green]EXECUTING[/green]  [green]FILLED[/green]  "
-        "[green]CANCELLED[/green]  [green]EXPIRED[/green]  [green]FAILED[/green]  "
-        "[green]PENDING_RATE_DECISION[/green]"
-    ),
-)
-def order_history(
-    status: Annotated[
-        str | None,
-        typer.Option(
-            "--status",
-            help="Filter by status: OPEN, PENDING_PAYMENT, PAID, EXECUTING, FILLED, CANCELLED, EXPIRED, FAILED, PENDING_RATE_DECISION.",
-        ),
-    ] = None,
-    limit: Annotated[
-        int, typer.Option("--limit", help="Maximum number of results to return.")
-    ] = 20,
-) -> None:
-    """Show maker swap-order history."""
-    asyncio.run(_order_history(status, limit))
-
-
-async def _order_history(status: str | None, limit: int) -> None:
-    try:
-        client = get_client()
-        resp: OrderHistoryResponse = await client.maker.get_order_history(
-            status=status, limit=limit
-        )
-        if is_json_mode():
-            print_json(resp.model_dump())
-            return
-        output_collection(
-            "Swap History",
-            [o.model_dump() for o in (resp.data or [])],
-            item_title="Swap Order — {index}",
-        )
-    except Exception as e:
-        raise_cli_error(e)
 
 
 @atomic_app.command(
