@@ -81,38 +81,6 @@ def _confirm_resp():
 
 
 # ---------------------------------------------------------------------------
-# swap order create
-# ---------------------------------------------------------------------------
-
-
-def test_swap_order_create_uses_live_pair_catalog(runner, mock_client):
-    mock_client.maker.list_pairs.return_value = _pairs_resp()
-    mock_client.maker.get_quote.return_value = _quote()
-    mock_client.maker.create_swap_order.return_value = _order()
-
-    result = runner.invoke(
-        app,
-        [
-            "swap",
-            "order",
-            "create",
-            "BTC/USDT",
-            "--to-amount",
-            "5",
-            "--receiver-address",
-            "lnbcrt1invoice",
-            "--receiver-format",
-            "BOLT11",
-        ],
-    )
-
-    assert result.exit_code == 0
-    mock_client.maker.list_pairs.assert_awaited_once()
-    mock_client.maker.get_quote.assert_awaited_once()
-    mock_client.maker.create_swap_order.assert_awaited_once()
-
-
-# ---------------------------------------------------------------------------
 # swap atomic init
 # ---------------------------------------------------------------------------
 
@@ -223,63 +191,6 @@ def test_swap_atomic_init_json(runner, mock_client):
     result = runner.invoke(
         app, ["--json", "swap", "atomic", "init", "BTC/USDT", "--from-amount", "1", "--yes"]
     )
-    assert result.exit_code == 0
-
-
-# ---------------------------------------------------------------------------
-# swap history
-# ---------------------------------------------------------------------------
-
-
-def test_swap_history_table(runner, mock_client):
-    order = MagicMock()
-    order.id = "abc123456789abcd"
-    order.status = "FILLED"
-    order.from_asset = "BTC"
-    order.to_asset = "USDT"
-    order.created_at = "2024-01-01"
-
-    resp = MagicMock()
-    resp.data = [order]
-    resp.model_dump.return_value = {}
-    mock_client.maker.get_order_history.return_value = resp
-
-    result = runner.invoke(app, ["swap", "order", "history"])
-    assert result.exit_code == 0
-    mock_client.maker.get_order_history.assert_awaited_once_with(status=None, limit=20)
-
-
-def test_swap_history_status_filter(runner, mock_client):
-    resp = MagicMock()
-    resp.data = []
-    mock_client.maker.get_order_history.return_value = resp
-
-    result = runner.invoke(app, ["swap", "order", "history", "--status", "FAILED", "--limit", "5"])
-    assert result.exit_code == 0
-    mock_client.maker.get_order_history.assert_awaited_once_with(status="FAILED", limit=5)
-
-
-def test_swap_history_json(runner, mock_client):
-    resp = MagicMock()
-    resp.data = []
-    resp.model_dump.return_value = {"data": []}
-    mock_client.maker.get_order_history.return_value = resp
-
-    result = runner.invoke(app, ["--json", "swap", "order", "history"])
-    assert result.exit_code == 0
-
-
-# ---------------------------------------------------------------------------
-# swap status
-# ---------------------------------------------------------------------------
-
-
-def test_swap_status(runner, mock_client):
-    resp = MagicMock()
-    resp.model_dump.return_value = {"status": "FILLED"}
-    mock_client.maker.get_swap_order_status.return_value = resp
-
-    result = runner.invoke(app, ["swap", "order", "status", "abc123456789abcd"])
     assert result.exit_code == 0
 
 

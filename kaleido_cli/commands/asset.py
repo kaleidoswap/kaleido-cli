@@ -35,6 +35,7 @@ from kaleido_sdk.rln import (
     WitnessData,
 )
 
+from kaleido_cli.config import DEFAULT_PROXY_ENDPOINT
 from kaleido_cli.context import get_client
 from kaleido_cli.output import (
     is_interactive,
@@ -304,6 +305,13 @@ def asset_invoice(
             help="Invoice validity duration in seconds.",
         ),
     ] = None,
+    transport_endpoints: Annotated[
+        list[str],
+        typer.Option(
+            "--transport-endpoint",
+            help="RGB proxy endpoint(s) to advertise on the invoice; can be repeated.",
+        ),
+    ] = [],
     witness: Annotated[
         bool,
         typer.Option(
@@ -325,7 +333,14 @@ def asset_invoice(
             amount = int(raw.strip())
 
     asyncio.run(
-        _asset_invoice(resolved_asset_id, amount, min_confirmations, duration_seconds, witness)
+        _asset_invoice(
+            resolved_asset_id,
+            amount,
+            min_confirmations,
+            duration_seconds,
+            transport_endpoints,
+            witness,
+        )
     )
 
 
@@ -334,11 +349,11 @@ async def _asset_invoice(
     amount: int | None,
     min_confirmations: int,
     duration_seconds: int | None,
+    transport_endpoints: list[str],
     witness: bool,
 ) -> None:
-    expiration_timestamp = (
-        int(time.time()) + duration_seconds if duration_seconds is not None else None
-    )
+    expiration_timestamp = int(time.time()) + (duration_seconds or 86400)
+    endpoints = transport_endpoints or [DEFAULT_PROXY_ENDPOINT]
     try:
         client = get_client(require_node=True)
         resp: RgbInvoiceResponse = await client.rln.create_rgb_invoice(
@@ -351,6 +366,7 @@ async def _asset_invoice(
                 ),
                 min_confirmations=min_confirmations,
                 expiration_timestamp=expiration_timestamp,
+                transport_endpoints=endpoints,
                 witness=witness,
             )
         )
@@ -478,7 +494,7 @@ async def _asset_send(
             fee_rate=fee_rate,
             min_confirmations=min_confirmations,
             donation=donation,
-            skip_sync=skip_sync,
+            expiration_timestamp=int(time.time()) + 86400,
         )
         resp: SendRgbResponse = await client.rln.send_rgb(body)
         if is_json_mode():
@@ -546,7 +562,7 @@ async def _asset_send_batch(json_file: str) -> None:
             fee_rate=data.get("fee_rate", 1),
             min_confirmations=data.get("min_confirmations", 0),
             donation=bool(data.get("donation", False)),
-            skip_sync=bool(data.get("skip_sync", False)),
+            expiration_timestamp=int(time.time()) + int(data.get("duration_seconds", 86400)),
         )
 
         resp: SendRgbResponse = await client.rln.send_rgb(body)
@@ -631,7 +647,7 @@ def asset_refresh(
 async def _asset_refresh(skip_sync: bool) -> None:
     try:
         client = get_client(require_node=True)
-        body = RefreshRequest(skip_sync=skip_sync)
+        body = RefreshRequest(skip_sync=skip_sync, filter=[])
         await client.rln.refresh_transfers(body)
         print_success("Transfers refreshed.")
     except Exception as e:

@@ -164,7 +164,7 @@ wheels = [
 
 [[package]]
 name = "kaleido-cli"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "kaleido-sdk" },
@@ -190,7 +190,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "kaleido-sdk", specifier = "==0.1.5" },
+    { name = "kaleido-sdk", specifier = ">=0.1.15" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "pytest-mock", marker = "extra == 'dev'", specifier = ">=3.15.1" },
@@ -210,16 +210,16 @@ dev = [
 
 [[package]]
 name = "kaleido-sdk"
-version = "0.1.5"
+version = "0.1.15"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic", extra = ["email"] },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/57/a1/87b8bc7435d8cac7c0228bc463ce303062df2146a0b0405764401318572f/kaleido_sdk-0.1.5.tar.gz", hash = "sha256:6d79d62679ac5975f0042e42ea7a4f3e63589e403848d2adba7faafc79fb68d5", size = 119649, upload-time = "2026-04-08T18:53:34.303Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/db/58/4dfd0b88a36347cacd63d6fd83288d4b12f1d973714ff7b8f5024c2b6e98/kaleido_sdk-0.1.15.tar.gz", hash = "sha256:36789f430f73c6982080a2cce323e145d69c287850b8e3f60e51cadee1021af0", size = 116841, upload-time = "2026-07-21T15:19:51.826Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c9/5e/f50b2e0ca429c3b2fbd31b7cd3463d1110bf5b3b806f48e15d5557c38304/kaleido_sdk-0.1.5-py3-none-any.whl", hash = "sha256:efb003e33ca0c196e643ed5d350467d9eb1fced00f4317c8a845d78112f1fc0d", size = 46908, upload-time = "2026-04-08T18:53:33.238Z" },
+    { url = "https://files.pythonhosted.org/packages/e4/bb/829c1fc9f3555833486928a629e881cd200b94fa8c7ec16466029c6aebd4/kaleido_sdk-0.1.15-py3-none-any.whl", hash = "sha256:e33f9d0b7bf20462f609bef0f79c805979ab9d37f4e2fb5a60229b8dd0e369d3", size = 45041, upload-time = "2026-07-21T15:19:50.739Z" },
 ]
 
 [[package]]

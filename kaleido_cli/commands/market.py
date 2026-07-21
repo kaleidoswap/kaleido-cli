@@ -239,24 +239,3 @@ async def _market_routes(pair: str) -> None:
         )
     except Exception as e:
         raise_cli_error(e)
-
-
-@market_app.command(
-    "analytics",
-    epilog="  [cyan]kaleido market analytics[/cyan]   Get order statistics.",
-)
-def market_analytics() -> None:
-    """Show Kaleidoswap order analytics and statistics."""
-    asyncio.run(_market_analytics())
-
-
-async def _market_analytics() -> None:
-    try:
-        client = get_client()
-        stats = await client.maker.get_order_analytics()
-        if is_json_mode():
-            print_json(stats.model_dump())
-        else:
-            output_model(stats, title="Order Analytics")
-    except Exception as e:
-        raise_cli_error(e)
