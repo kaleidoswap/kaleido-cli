@@ -167,7 +167,7 @@ async def _wallet_utxos(skip_sync: bool) -> None:
     try:
         client = get_client(require_node=True)
         resp: ListUnspentsResponse = await client.rln.list_unspents(
-            ListUnspentsRequest(skip_sync=skip_sync)
+            ListUnspentsRequest(skip_sync=skip_sync, settled_only=False)
         )
         if is_json_mode():
             print_json(resp.model_dump())

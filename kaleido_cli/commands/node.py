@@ -729,7 +729,6 @@ async def _node_unlock(
             bitcoind_rpc_host=bitcoind_host,
             bitcoind_rpc_port=bitcoind_port,
             indexer_url=indexer_url,
-            proxy_endpoint=proxy_endpoint,
             announce_alias=announce_alias,
             announce_addresses=announce_addresses,
         )

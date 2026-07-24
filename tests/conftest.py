@@ -80,11 +80,7 @@ def mock_client(mocker):
     maker.get_quote = AsyncMock()
     maker.get_swap_node_info = AsyncMock()
     maker.get_pair_routes = AsyncMock()
-    maker.get_order_analytics = AsyncMock()
-    maker.get_order_history = AsyncMock()
-    maker.get_swap_order_status = AsyncMock()
     maker.get_atomic_swap_status = AsyncMock()
-    maker.create_swap_order = AsyncMock()
     maker.init_swap = AsyncMock()
     maker.execute_swap = AsyncMock()
     client.maker = maker

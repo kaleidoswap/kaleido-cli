@@ -173,17 +173,3 @@ def test_market_routes(runner, mock_client):
 def test_market_routes_no_pair_agent_mode_exits_1(runner, mock_client):
     result = runner.invoke(app, ["--agent", "market", "routes"])
     assert result.exit_code != 0
-
-
-# ---------------------------------------------------------------------------
-# market analytics
-# ---------------------------------------------------------------------------
-
-
-def test_market_analytics(runner, mock_client):
-    stats = MagicMock()
-    stats.model_dump.return_value = {"total_orders": 42}
-    mock_client.maker.get_order_analytics.return_value = stats
-
-    result = runner.invoke(app, ["market", "analytics"])
-    assert result.exit_code == 0

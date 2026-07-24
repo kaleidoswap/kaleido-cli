@@ -9,13 +9,11 @@ from kaleido_cli.config import (
     DEFAULT_BITCOIND_RPC_PORT,
     DEFAULT_BITCOIND_RPC_USERNAME,
     DEFAULT_INDEXER_URL,
-    DEFAULT_PROXY_ENDPOINT,
     DEFAULT_REGTEST_BITCOIND_RPC_HOST,
     DEFAULT_REGTEST_BITCOIND_RPC_PASSWORD,
     DEFAULT_REGTEST_BITCOIND_RPC_PORT,
     DEFAULT_REGTEST_BITCOIND_RPC_USERNAME,
     DEFAULT_REGTEST_INDEXER_URL,
-    DEFAULT_REGTEST_PROXY_ENDPOINT,
 )
 
 
@@ -36,7 +34,6 @@ def test_node_unlock_interactive_signet_defaults(runner, mocker, mock_client):
     assert req.bitcoind_rpc_host == DEFAULT_BITCOIND_RPC_HOST
     assert req.bitcoind_rpc_port == DEFAULT_BITCOIND_RPC_PORT
     assert req.indexer_url == DEFAULT_INDEXER_URL
-    assert req.proxy_endpoint == DEFAULT_PROXY_ENDPOINT
 
 
 def test_node_unlock_interactive_regtest_defaults(runner, mocker, mock_client):
@@ -52,7 +49,6 @@ def test_node_unlock_interactive_regtest_defaults(runner, mocker, mock_client):
     assert req.bitcoind_rpc_host == DEFAULT_REGTEST_BITCOIND_RPC_HOST
     assert req.bitcoind_rpc_port == DEFAULT_REGTEST_BITCOIND_RPC_PORT
     assert req.indexer_url == DEFAULT_REGTEST_INDEXER_URL
-    assert req.proxy_endpoint == DEFAULT_REGTEST_PROXY_ENDPOINT
 
 
 def test_node_unlock_interactive_custom_services(runner, mocker, mock_client):
@@ -83,6 +79,5 @@ def test_node_unlock_interactive_custom_services(runner, mocker, mock_client):
     assert req.bitcoind_rpc_host == "127.0.0.1"
     assert req.bitcoind_rpc_port == 18443
     assert req.indexer_url == "tcp://127.0.0.1:50001"
-    assert req.proxy_endpoint == "rpc://127.0.0.1:3000/json-rpc"
     assert req.announce_alias == "alias"
     assert req.announce_addresses == ["127.0.0.1:9735"]
