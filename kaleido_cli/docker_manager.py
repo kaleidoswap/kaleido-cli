@@ -14,7 +14,7 @@ from .output import print_error, print_info, print_success, print_warning
 
 COMPOSE_FILE = "docker-compose.yml"
 
-RLN_IMAGE = "kaleidoswap/rgb-lightning-node:latest"
+RLN_IMAGE = "kaleidoswap/rgb-lightning-node:0.9.0"
 
 DEFAULT_BASE_DAEMON_PORT = 3001
 DEFAULT_BASE_PEER_PORT = 9735
