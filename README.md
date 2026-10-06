@@ -1,6 +1,6 @@
 # Kaleido CLI
 
-[![PyPI](https://img.shields.io/pypi/v/kaleido-cli)](https://pypi.org/project/kaleido-cli/)
+[![CI](https://github.com/kaleidoswap/kaleido-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/kaleidoswap/kaleido-cli/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
@@ -23,7 +23,7 @@ Manage RGB Lightning Nodes and trade on [Kaleidoswap](https://kaleidoswap.com) â
 
 - Python 3.10+
 - `curl` or `wget` only for the one-line shell bootstrap command
-- Docker & Docker Compose only for Docker-based `node` commands
+- Docker & Docker Compose for `kaleido setup` (local node) and the Docker-based `node` commands
 
 ---
 
@@ -50,6 +50,8 @@ wget -qO- https://raw.githubusercontent.com/kaleidoswap/kaleido-cli/master/insta
 ```
 
 The bootstrap script downloads the latest `master` branch, prefers `uv tool install` when available, and otherwise installs into an isolated Kaleido virtual environment using Python's standard library. It does not install packages into the system Python environment.
+
+`kaleido-cli` is not on PyPI yet. Once it is published, `pip install kaleido-cli` or `uv tool install kaleido-cli` will also work.
 
 Then run:
 
