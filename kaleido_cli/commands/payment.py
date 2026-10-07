@@ -58,7 +58,9 @@ payment_app = typer.Typer(
         "  RGB+LN invoice (receive USDT tokens over Lightning):\n"
         "  [cyan]kaleido payment invoice --asset-id rgb:abc... --asset-amount 500[/cyan]\n\n"
         "  With custom expiry (1 hour):\n"
-        "  [cyan]kaleido payment invoice --amount-msat 10000 --expiry 3600[/cyan]"
+        "  [cyan]kaleido payment invoice --amount-msat 10000 --expiry 3600[/cyan]\n\n"
+        "  With a description:\n"
+        "  [cyan]kaleido payment invoice --amount-msat 10000 -d 'Coffee'[/cyan]"
     ),
 )
 def payment_invoice(
@@ -89,10 +91,26 @@ def payment_invoice(
         int | None,
         typer.Option("--asset-amount", help="Amount of RGB asset to request."),
     ] = None,
+    description: Annotated[
+        str | None,
+        typer.Option("--description", "-d", help="Description shown to the payer."),
+    ] = None,
+    description_hash: Annotated[
+        str | None,
+        typer.Option(
+            "--description-hash",
+            help="SHA-256 (hex) of a description committed to instead of including it.",
+        ),
+    ] = None,
 ) -> None:
     """Create a Lightning invoice (BOLT11)."""
     require_option_when_set(asset_id, "--asset-id", **{"--asset-amount": asset_amount})
-    asyncio.run(_payment_invoice(amount_msat, expiry, asset_id, asset_amount))
+    if description and description_hash:
+        print_error("Pass either --description or --description-hash, not both.")
+        raise typer.Exit(1)
+    asyncio.run(
+        _payment_invoice(amount_msat, expiry, asset_id, asset_amount, description, description_hash)
+    )
 
 
 async def _payment_invoice(
@@ -100,6 +118,8 @@ async def _payment_invoice(
     expiry: int,
     asset_id: str | None,
     asset_amount: int | None,
+    description: str | None = None,
+    description_hash: str | None = None,
 ) -> None:
     try:
         client = get_client(require_node=True)
@@ -108,6 +128,8 @@ async def _payment_invoice(
             expiry_sec=expiry,
             asset_id=asset_id,
             asset_amount=asset_amount,
+            description=description,
+            description_hash=description_hash,
         )
         resp: LNInvoiceResponse = await client.rln.create_ln_invoice(body)
         if is_json_mode():

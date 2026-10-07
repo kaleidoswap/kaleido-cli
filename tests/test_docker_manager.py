@@ -48,3 +48,45 @@ def test_port_in_use_detects_listening_socket():
         sock.bind(("0.0.0.0", 0))
         sock.listen()
         assert port_in_use(sock.getsockname()[1])
+
+
+def test_generated_compose_targets_current_image_without_platform_pin(tmp_path):
+    from kaleido_cli.docker_manager import RLN_IMAGE
+
+    manager = SpawnManager(SpawnConfig(name="env", spawn_base_dir=str(tmp_path)))
+    compose = yaml.safe_load(manager.generate_compose().read_text())
+    service = compose["services"]["rgb_node_1"]
+
+    assert service["image"] == RLN_IMAGE
+    assert "platform" not in service
+    assert (tmp_path / "env" / "volumes" / "dataldk0").is_dir()
+
+
+def test_upgrade_compose_rewrites_old_image(tmp_path):
+    from kaleido_cli.docker_manager import RLN_IMAGE, upgrade_compose
+
+    compose_path = tmp_path / "docker-compose.yml"
+    compose_path.write_text(
+        yaml.dump(
+            {
+                "services": {
+                    "rgb_node_1": {
+                        "image": "kaleidoswap/rgb-lightning-node:0.9.0",
+                        "platform": "linux/amd64",
+                        "volumes": ["./volumes/dataldk0:/tmp/kaleidoswap/dataldk0"],
+                    },
+                    "other": {"image": "redis:7"},
+                }
+            }
+        )
+    )
+
+    changed = upgrade_compose(compose_path)
+    services = yaml.safe_load(compose_path.read_text())["services"]
+
+    assert changed == [("rgb_node_1", "kaleidoswap/rgb-lightning-node:0.9.0")]
+    assert services["rgb_node_1"]["image"] == RLN_IMAGE
+    assert "platform" not in services["rgb_node_1"]
+    assert services["other"] == {"image": "redis:7"}
+    assert (tmp_path / "volumes" / "dataldk0").is_dir()
+    assert upgrade_compose(compose_path) == []

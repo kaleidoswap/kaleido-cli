@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import socket
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -15,7 +17,8 @@ from .output import print_error, print_info, print_success, print_warning
 
 COMPOSE_FILE = "docker-compose.yml"
 
-RLN_IMAGE = "kaleidoswap/rgb-lightning-node:0.9.0"
+RLN_IMAGE_REPO = "kaleidoswap/rgb-lightning-node"
+RLN_IMAGE = f"{RLN_IMAGE_REPO}:0.10.0"
 
 DEFAULT_BASE_DAEMON_PORT = 3001
 DEFAULT_BASE_PEER_PORT = 9735
@@ -91,6 +94,65 @@ def find_free_base_ports(
         raise RuntimeError(f"No free port block of {count} found from {start}")
 
     return first_free(daemon_base), first_free(peer_base)
+
+
+def container_user() -> str | None:
+    """On Linux, run as the invoking user so bind-mounted data dirs stay writable.
+
+    The image runs as uid 1000; Docker Desktop maps bind-mount ownership, plain
+    Linux Docker does not.
+    """
+    if not sys.platform.startswith("linux") or os.getuid() == 0:
+        return None
+    return f"{os.getuid()}:{os.getgid()}"
+
+
+def upgrade_compose(compose_path: Path, image: str = RLN_IMAGE) -> list[tuple[str, str]]:
+    """Point every RLN service in *compose_path* at *image*.
+
+    Returns ``(service, old_image)`` for each service that changed. Also drops the
+    ``linux/amd64`` pin older CLIs wrote (the image is multi-arch) and creates the
+    bind-mounted data dirs so a non-root container can write to them.
+    """
+    compose = yaml.safe_load(compose_path.read_text()) or {}
+    changed: list[tuple[str, str]] = []
+    user = container_user()
+    for name, service in (compose.get("services") or {}).items():
+        old = str((service or {}).get("image", ""))
+        if not old.startswith(RLN_IMAGE_REPO):
+            continue
+        dirty = False
+        if old != image:
+            service["image"] = image
+            changed.append((name, old))
+            dirty = True
+        if service.pop("platform", None) is not None:
+            dirty = True
+        if user and service.get("user") != user:
+            service["user"] = user
+            dirty = True
+        for volume in service.get("volumes") or []:
+            host = str(volume).split(":")[0]
+            if host.startswith("."):
+                (compose_path.parent / host).mkdir(parents=True, exist_ok=True)
+        if dirty and (name, old) not in changed:
+            changed.append((name, old))
+    if changed:
+        compose_path.write_text(yaml.dump(compose, default_flow_style=False, sort_keys=False))
+    return changed
+
+
+def compose_images(compose_path: Path) -> set[str]:
+    """RLN images referenced by *compose_path*."""
+    try:
+        compose = yaml.safe_load(compose_path.read_text()) or {}
+    except (OSError, yaml.YAMLError):
+        return set()
+    return {
+        str(svc.get("image"))
+        for svc in (compose.get("services") or {}).values()
+        if svc and str(svc.get("image", "")).startswith(RLN_IMAGE_REPO)
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -327,7 +389,6 @@ class SpawnManager(DockerManager):
 
             service: dict = {
                 "image": RLN_IMAGE,
-                "platform": "linux/amd64",
                 "command": " ".join(cmd_parts),
                 "networks": [cfg.network_name],
                 "ports": [
@@ -356,6 +417,10 @@ class SpawnManager(DockerManager):
                 "stop_grace_period": "1m",
                 "stop_signal": "SIGTERM",
             }
+
+            if user := container_user():
+                service["user"] = user
+            (spawn_dir / host_data).mkdir(parents=True, exist_ok=True)
 
             services[f"rgb_node_{idx + 1}"] = service
 

@@ -27,12 +27,16 @@ from kaleido_cli.config import (
 )
 from kaleido_cli.context import get_client, state
 from kaleido_cli.docker_manager import (
+    COMPOSE_FILE,
     DEFAULT_SPAWN_DIR,
+    RLN_IMAGE,
     DockerManager,
     SpawnConfig,
     SpawnManager,
+    compose_images,
     find_free_base_ports,
     list_spawn_names,
+    upgrade_compose,
 )
 from kaleido_cli.output import (
     is_interactive,
@@ -370,12 +374,57 @@ def node_up(
     dm = _dm(name)
     if not dm._validate():
         raise typer.Exit(1)
+    outdated = compose_images(dm.compose_dir / COMPOSE_FILE) - {RLN_IMAGE}
+    if outdated:
+        print_warning(
+            f"'{name}' runs {', '.join(sorted(outdated))}; "
+            f"run 'kaleido node upgrade {name}' to move to {RLN_IMAGE}."
+        )
     print_info(f"Starting environment '{name}' …")
     rc = dm._run(["up", "-d"])
     if rc == 0:
         print_success(f"Environment '{name}' is up.")
     else:
         raise typer.Exit(rc)
+
+
+@node_app.command(
+    "upgrade",
+    epilog=(
+        "[bold]Examples[/bold]\n\n"
+        "  [cyan]kaleido node upgrade default[/cyan]             Upgrade and restart\n"
+        "  [cyan]kaleido node upgrade default --no-start[/cyan]  Only rewrite the compose file\n\n"
+        "[dim]Node data is kept. Unlock the node again after it restarts.[/dim]"
+    ),
+)
+def node_upgrade(
+    name: Annotated[
+        str | None,
+        typer.Argument(help="Environment name. Auto-detected if only one exists."),
+    ] = None,
+    start: Annotated[
+        bool,
+        typer.Option("--start/--no-start", help="Recreate the containers after upgrading."),
+    ] = True,
+) -> None:
+    """Move an environment to the RGB Lightning Node image this CLI targets."""
+    name = _resolve_name(name)
+    dm = _dm(name)
+    if not dm._validate():
+        raise typer.Exit(1)
+    changed = upgrade_compose(dm.compose_dir / COMPOSE_FILE)
+    if not changed:
+        print_success(f"Environment '{name}' already uses {RLN_IMAGE}.")
+        return
+    for service, old in changed:
+        print_info(f"{service}: {old} → {RLN_IMAGE}")
+    if not start:
+        print_info(f"Compose file updated. Start with: kaleido node up {name}")
+        return
+    rc = dm._run(["up", "-d"])
+    if rc != 0:
+        raise typer.Exit(rc)
+    print_success(f"Environment '{name}' upgraded. Unlock it with: kaleido node unlock")
 
 
 @node_app.command(
