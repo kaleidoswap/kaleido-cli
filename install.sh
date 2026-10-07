@@ -12,16 +12,16 @@ fail() {
 }
 
 python_ok() {
-    "$1" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1
+    "$1" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' >/dev/null 2>&1
 }
 
 find_python() {
     if [ -n "${KALEIDO_PYTHON:-}" ]; then
-        python_ok "$KALEIDO_PYTHON" || fail "KALEIDO_PYTHON=$KALEIDO_PYTHON is not Python 3.10 or newer."
+        python_ok "$KALEIDO_PYTHON" || fail "KALEIDO_PYTHON=$KALEIDO_PYTHON is not Python 3.11 or newer."
         printf '%s\n' "$KALEIDO_PYTHON"
         return 0
     fi
-    for candidate in python3 python3.14 python3.13 python3.12 python3.11 python3.10 python; do
+    for candidate in python3 python3.14 python3.13 python3.12 python3.11 python; do
         if command -v "$candidate" >/dev/null 2>&1 && python_ok "$candidate"; then
             printf '%s\n' "$candidate"
             return 0
@@ -30,7 +30,7 @@ find_python() {
     return 1
 }
 
-PYTHON_BIN="$(find_python)" || fail "Kaleido CLI requires Python 3.10 or newer. Install one, or point KALEIDO_PYTHON at it."
+PYTHON_BIN="$(find_python)" || fail "Kaleido CLI requires Python 3.11 or newer. Install one, or point KALEIDO_PYTHON at it."
 
 # Install the checkout only when this file is run from one (./install.sh), not
 # when piped from curl while the shell happens to sit inside a checkout.

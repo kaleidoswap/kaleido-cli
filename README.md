@@ -1,7 +1,7 @@
 # Kaleido CLI
 
 [![CI](https://github.com/kaleidoswap/kaleido-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/kaleidoswap/kaleido-cli/actions/workflows/ci.yml)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
 Manage RGB Lightning Nodes and trade on [Kaleidoswap](https://kaleidoswap.com) â€” all from your terminal.
@@ -21,7 +21,7 @@ Manage RGB Lightning Nodes and trade on [Kaleidoswap](https://kaleidoswap.com) â
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.11+
 - `curl` or `wget` only for the one-line shell bootstrap command
 - Docker & Docker Compose for `kaleido setup` (local node) and the Docker-based `node` commands
 
@@ -89,7 +89,7 @@ For Windows or a cross-platform Python-based installer:
 python install.py
 ```
 
-The Python installer has the same minimal requirement: Python 3.10+. `install.sh` uses the first `python3`, `python3.1x` or `python` on your `PATH` that meets it; set `KALEIDO_PYTHON=/path/to/python` to choose one explicitly. When `uv` is unavailable, it creates a dedicated app virtual environment and writes a `kaleido` launcher into your user script directory.
+The Python installer has the same minimal requirement: Python 3.11+. `install.sh` uses the first `python3`, `python3.1x` or `python` on your `PATH` that meets it; set `KALEIDO_PYTHON=/path/to/python` to choose one explicitly. When `uv` is unavailable, it creates a dedicated app virtual environment and writes a `kaleido` launcher into your user script directory.
 
 For a local editable install with the existing Makefile helper:
 

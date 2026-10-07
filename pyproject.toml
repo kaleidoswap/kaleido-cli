@@ -8,7 +8,7 @@ version = "0.1.1"
 description = "CLI for managing RGB Lightning Nodes and interacting with Kaleidoswap"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [
     { name = "Kaleidoswap", email = "dev@kaleidoswap.com" }
 ]
@@ -39,11 +39,11 @@ Repository = "https://github.com/kaleidoswap/kaleido-cli"
 packages = ["kaleido_cli"]
 
 [tool.pyright]
-pythonVersion = "3.10"
+pythonVersion = "3.11"
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 exclude = ["install.py"]
 
 [tool.ruff.lint]
