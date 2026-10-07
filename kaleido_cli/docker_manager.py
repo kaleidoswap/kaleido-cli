@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import socket
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -35,6 +36,61 @@ def list_spawn_names(base_dir: Path) -> list[str]:
     if not base_dir.exists():
         return []
     return sorted(d.name for d in base_dir.iterdir() if d.is_dir() and (d / COMPOSE_FILE).exists())
+
+
+def port_in_use(port: int) -> bool:
+    """True if *port* cannot be bound on the IPv4 or IPv6 wildcard address."""
+    for family, host in ((socket.AF_INET, "0.0.0.0"), (socket.AF_INET6, "::")):
+        try:
+            with socket.socket(family, socket.SOCK_STREAM) as sock:
+                sock.bind((host, port))
+        except OSError as exc:
+            if family == socket.AF_INET6 and exc.errno == getattr(socket, "EAFNOSUPPORT", None):
+                continue
+            return True
+    return False
+
+
+def reserved_ports(base_dir: Path, exclude: str | None = None) -> set[int]:
+    """Host ports published by existing environments under *base_dir*, running or not."""
+    ports: set[int] = set()
+    for name in list_spawn_names(base_dir):
+        if name == exclude:
+            continue
+        try:
+            compose = yaml.safe_load((base_dir / name / COMPOSE_FILE).read_text()) or {}
+        except (OSError, yaml.YAMLError):
+            continue
+        for service in (compose.get("services") or {}).values():
+            for mapping in (service or {}).get("ports") or []:
+                host = str(mapping).split(":")[-2] if ":" in str(mapping) else str(mapping)
+                if host.isdigit():
+                    ports.add(int(host))
+    return ports
+
+
+def find_free_base_ports(
+    count: int,
+    base_dir: Path,
+    exclude_env: str | None = None,
+    daemon_base: int = DEFAULT_BASE_DAEMON_PORT,
+    peer_base: int = DEFAULT_BASE_PEER_PORT,
+    max_tries: int = 100,
+) -> tuple[int, int]:
+    """First (daemon_base, peer_base) pair whose *count* consecutive ports are all free."""
+    taken = reserved_ports(base_dir, exclude=exclude_env)
+
+    def block_free(start: int) -> bool:
+        return all(p not in taken and not port_in_use(p) for p in range(start, start + count))
+
+    def first_free(start: int) -> int:
+        for offset in range(max_tries):
+            candidate = start + offset * count
+            if block_free(candidate):
+                return candidate
+        raise RuntimeError(f"No free port block of {count} found from {start}")
+
+    return first_free(daemon_base), first_free(peer_base)
 
 
 # ---------------------------------------------------------------------------
