@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from time import perf_counter
 from typing import Any, TypeVar
 
@@ -89,7 +89,7 @@ def _normalize_channel_lsp_datetimes(value: Any, key: str | None = None) -> Any:
     if key is not None and key.endswith("_at") and isinstance(value, str):
         parsed = _parse_iso_datetime(value)
         if parsed is not None and parsed.tzinfo is None:
-            return parsed.replace(tzinfo=timezone.utc).isoformat()
+            return parsed.replace(tzinfo=UTC).isoformat()
     return value
 
 

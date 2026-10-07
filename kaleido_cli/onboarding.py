@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +21,7 @@ from .docker_manager import (
 from .output import is_interactive, print_error, print_info, print_panel, print_success
 
 
-class SetupMode(str, Enum):
+class SetupMode(StrEnum):
     market = "market"
     local = "local"
 

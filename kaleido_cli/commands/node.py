@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
@@ -82,7 +82,7 @@ node_app = typer.Typer(
 node_app.add_typer(node_swap_app, name="swap")
 
 
-class ChainSyncMode(str, Enum):
+class ChainSyncMode(StrEnum):
     """How LDK follows the chain — RLN 0.9.0's `ldk_chain_sync` modes."""
 
     BLOCK = "block"

@@ -139,8 +139,8 @@ def _write_launcher(bin_dir: Path, python: Path) -> None:
 
 
 def main() -> int:
-    if sys.version_info < (3, 10):
-        print("Kaleido CLI requires Python 3.10 or newer.")
+    if sys.version_info < (3, 11):
+        print("Kaleido CLI requires Python 3.11 or newer.")
         return 1
 
     script_file = globals().get("__file__")
@@ -158,7 +158,7 @@ def main() -> int:
             editable = False
 
         if shutil.which("uv"):
-            cmd = ["uv", "tool", "install", "--force", install_target]
+            cmd = ["uv", "tool", "install", "--force", "--python", sys.executable, install_target]
             if editable:
                 cmd.insert(3, "--editable")
             rc = _run(cmd)
