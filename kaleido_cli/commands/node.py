@@ -27,12 +27,11 @@ from kaleido_cli.config import (
 )
 from kaleido_cli.context import get_client, state
 from kaleido_cli.docker_manager import (
-    DEFAULT_BASE_DAEMON_PORT,
-    DEFAULT_BASE_PEER_PORT,
     DEFAULT_SPAWN_DIR,
     DockerManager,
     SpawnConfig,
     SpawnManager,
+    find_free_base_ports,
     list_spawn_names,
 )
 from kaleido_cli.output import (
@@ -223,16 +222,15 @@ def node_create(
 
     # ── Node ports ───────────────────────────────────────────────────────────
     print_info("  ── Node ports ────────────────────────────────────────")
-    end_d = DEFAULT_BASE_DAEMON_PORT + count - 1
-    end_p = DEFAULT_BASE_PEER_PORT + count - 1
+    free_daemon, free_peer = find_free_base_ports(count, base, exclude_env=resolved_name)
     daemon_base = typer.prompt(
-        f"  Base daemon API port  ({DEFAULT_BASE_DAEMON_PORT}–{end_d})",
-        default=DEFAULT_BASE_DAEMON_PORT,
+        f"  Base daemon API port  ({free_daemon}–{free_daemon + count - 1})",
+        default=free_daemon,
         type=int,
     )
     peer_base = typer.prompt(
-        f"  Base LDK peer port    ({DEFAULT_BASE_PEER_PORT}–{end_p})",
-        default=DEFAULT_BASE_PEER_PORT,
+        f"  Base LDK peer port    ({free_peer}–{free_peer + count - 1})",
+        default=free_peer,
         type=int,
     )
 

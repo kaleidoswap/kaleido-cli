@@ -9,7 +9,15 @@ from typing import Any
 import typer
 
 from .config import load_config, save_config
-from .docker_manager import COMPOSE_FILE, DEFAULT_SPAWN_DIR, SpawnConfig, SpawnManager
+from .docker_manager import (
+    COMPOSE_FILE,
+    DEFAULT_BASE_DAEMON_PORT,
+    DEFAULT_BASE_PEER_PORT,
+    DEFAULT_SPAWN_DIR,
+    SpawnConfig,
+    SpawnManager,
+    find_free_base_ports,
+)
 from .output import is_interactive, print_error, print_info, print_panel, print_success
 
 
@@ -184,12 +192,23 @@ def run_setup(
                 config.spawn_dir = str(base_dir)
                 save_config(config)
 
+                daemon_base, peer_base = find_free_base_ports(
+                    count, base_dir, exclude_env=resolved_env_name
+                )
+                if (daemon_base, peer_base) != (DEFAULT_BASE_DAEMON_PORT, DEFAULT_BASE_PEER_PORT):
+                    print_info(
+                        f"Default ports are taken; using API port {daemon_base} "
+                        f"and peer port {peer_base}."
+                    )
+
                 manager = SpawnManager(
                     SpawnConfig(
                         name=resolved_env_name,
                         count=count,
                         network=config.network,
                         disable_authentication=True,
+                        base_daemon_port=daemon_base,
+                        base_peer_port=peer_base,
                         spawn_base_dir=str(base_dir),
                     )
                 )
