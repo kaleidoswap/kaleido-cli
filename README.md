@@ -185,6 +185,7 @@ The wizard prompts for:
 kaleido node list                   # list all environments with their node URLs
 kaleido node up     <name>          # start containers (docker compose up -d)
 kaleido node stop   <name>          # stop containers (data preserved)
+kaleido node upgrade <name>         # move to the node image this CLI targets (data kept)
 kaleido node down   <name>          # stop and remove containers
 kaleido node ps     <name>          # show container status
 kaleido node logs   <name>          # stream all logs
@@ -245,6 +246,7 @@ kaleido --json market pairs
 | `kaleido node up <name>`                  | Start containers (docker compose up -d)             |
 | `kaleido node stop <name>`                | Stop containers (data preserved)                    |
 | `kaleido node down <name>`                | Stop and remove containers + networks               |
+| `kaleido node upgrade <name>`             | Move to the node image this CLI targets             |
 | `kaleido node ps <name>`                  | Show container status                               |
 | `kaleido node logs <name> [--service S]`  | Stream logs (optionally filtered by service)        |
 | `kaleido node clean <name>`               | Delete all data volumes (irreversible)              |
@@ -269,6 +271,7 @@ kaleido --json market pairs
 | `kaleido asset list`                 | List all RGB assets held by the node   |
 | `kaleido asset balance <asset-id>`   | Show balance for a specific RGB asset  |
 | `kaleido asset metadata <asset-id>`  | Show metadata for a specific RGB asset |
+| `kaleido asset transfers [asset-id]` | List transfers (`--no-asset`, `--txid`) |
 
 ### `channel` — Lightning channels
 
@@ -290,7 +293,7 @@ kaleido --json market pairs
 
 | Command                          | Description                             |
 |----------------------------------|-----------------------------------------|
-| `kaleido payment invoice`        | Create a BOLT11 invoice (BTC or RGB+LN) |
+| `kaleido payment invoice`        | Create a BOLT11 invoice (BTC or RGB+LN, `--description`) |
 | `kaleido payment send <invoice>` | Pay a BOLT11 invoice                    |
 | `kaleido payment list`           | List payment history                    |
 

@@ -32,9 +32,17 @@ find_python() {
 
 PYTHON_BIN="$(find_python)" || fail "Kaleido CLI requires Python 3.10 or newer. Install one, or point KALEIDO_PYTHON at it."
 
-if [ -f "./pyproject.toml" ] && [ -d "./kaleido_cli" ]; then
-    exec "$PYTHON_BIN" ./install.py
-fi
+# Install the checkout only when this file is run from one (./install.sh), not
+# when piped from curl while the shell happens to sit inside a checkout.
+case "$0" in
+    *install.sh)
+        SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+        if [ -f "$SCRIPT_DIR/pyproject.toml" ] && [ -d "$SCRIPT_DIR/kaleido_cli" ]; then
+            cd "$SCRIPT_DIR"
+            exec "$PYTHON_BIN" ./install.py
+        fi
+        ;;
+esac
 
 "$PYTHON_BIN" - "${ARCHIVE_REPO}/${INSTALL_REF}.tar.gz" "${PACKAGE_NAME}" <<'PY'
 from __future__ import annotations

@@ -10,6 +10,9 @@ import typer
 from kaleido_sdk.rln import (
     AssetBalanceRequest,
     AssetBalanceResponse,
+    AssetFilterAnyOrNone,
+    AssetFilterId,
+    AssetFilterNone,
     AssetMetadataRequest,
     AssetMetadataResponse,
     AssignmentFungible,
@@ -582,25 +585,48 @@ async def _asset_send_batch(json_file: str) -> None:
 @asset_app.command(
     "transfers",
     epilog=(
-        "  [cyan]kaleido asset transfers[/cyan]               All transfers\n"
-        "  [cyan]kaleido asset transfers rgb:abc123...[/cyan]  Filtered by asset"
+        "  [cyan]kaleido asset transfers[/cyan]                   All transfers\n"
+        "  [cyan]kaleido asset transfers rgb:abc123...[/cyan]      Filtered by asset\n"
+        "  [cyan]kaleido asset transfers --no-asset[/cyan]         Transfers without an asset\n"
+        "  [cyan]kaleido asset transfers --txid 47ee0f...[/cyan]   Transfers in one transaction"
     ),
 )
 def asset_transfers(
     asset_id: Annotated[
-        str,
-        typer.Argument(help="RGB asset ID to list transfers for."),
-    ],
+        str | None,
+        typer.Argument(help="RGB asset ID to list transfers for. Omit for all transfers."),
+    ] = None,
+    no_asset: Annotated[
+        bool,
+        typer.Option("--no-asset", help="Only transfers not bound to an asset."),
+    ] = False,
+    txid: Annotated[
+        str | None,
+        typer.Option("--txid", help="Only transfers belonging to this transaction."),
+    ] = None,
 ) -> None:
-    """List RGB transfers for a specific asset."""
-    asyncio.run(_asset_transfers(asset_id))
+    """List RGB transfers, optionally filtered by asset or transaction."""
+    if asset_id and no_asset:
+        print_error("Pass either ASSET_ID or --no-asset, not both.")
+        raise typer.Exit(1)
+    asyncio.run(_asset_transfers(asset_id, no_asset, txid))
 
 
-async def _asset_transfers(asset_id: str) -> None:
+def _transfer_filter(
+    asset_id: str | None, no_asset: bool
+) -> AssetFilterId | AssetFilterNone | AssetFilterAnyOrNone:
+    if asset_id:
+        return AssetFilterId(type="Id", value=asset_id)
+    if no_asset:
+        return AssetFilterNone(type="None")
+    return AssetFilterAnyOrNone(type="AnyOrNone")
+
+
+async def _asset_transfers(asset_id: str | None, no_asset: bool, txid: str | None) -> None:
     try:
         client = get_client(require_node=True)
         resp: ListTransfersResponse = await client.rln.list_transfers(
-            ListTransfersRequest(asset_id=asset_id)
+            ListTransfersRequest(asset_filter=_transfer_filter(asset_id, no_asset), txid=txid)
         )
         if is_json_mode():
             print_json(resp.model_dump())
