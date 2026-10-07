@@ -89,7 +89,7 @@ For Windows or a cross-platform Python-based installer:
 python install.py
 ```
 
-The Python installer has the same minimal requirement: Python 3.10+. When `uv` is unavailable, it creates a dedicated app virtual environment and writes a `kaleido` launcher into your user script directory.
+The Python installer has the same minimal requirement: Python 3.10+. `install.sh` uses the first `python3`, `python3.1x` or `python` on your `PATH` that meets it; set `KALEIDO_PYTHON=/path/to/python` to choose one explicitly. When `uv` is unavailable, it creates a dedicated app virtual environment and writes a `kaleido` launcher into your user script directory.
 
 For a local editable install with the existing Makefile helper:
 

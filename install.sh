@@ -11,24 +11,26 @@ fail() {
     exit 1
 }
 
+python_ok() {
+    "$1" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1
+}
+
 find_python() {
-    if command -v python3 >/dev/null 2>&1; then
-        printf '%s\n' python3
+    if [ -n "${KALEIDO_PYTHON:-}" ]; then
+        python_ok "$KALEIDO_PYTHON" || fail "KALEIDO_PYTHON=$KALEIDO_PYTHON is not Python 3.10 or newer."
+        printf '%s\n' "$KALEIDO_PYTHON"
         return 0
     fi
-    if command -v python >/dev/null 2>&1; then
-        printf '%s\n' python
-        return 0
-    fi
+    for candidate in python3 python3.14 python3.13 python3.12 python3.11 python3.10 python; do
+        if command -v "$candidate" >/dev/null 2>&1 && python_ok "$candidate"; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
     return 1
 }
 
-PYTHON_BIN="$(find_python)" || fail "Python 3.10 or newer is required."
-
-"$PYTHON_BIN" - <<'PY' || fail "Kaleido CLI requires Python 3.10 or newer."
-import sys
-raise SystemExit(0 if sys.version_info >= (3, 10) else 1)
-PY
+PYTHON_BIN="$(find_python)" || fail "Kaleido CLI requires Python 3.10 or newer. Install one, or point KALEIDO_PYTHON at it."
 
 if [ -f "./pyproject.toml" ] && [ -d "./kaleido_cli" ]; then
     exec "$PYTHON_BIN" ./install.py
