@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kaleido-cli"
-version = "0.1.1"
+version = "0.1.2"
 description = "CLI for managing RGB Lightning Nodes and interacting with Kaleidoswap"
 readme = "README.md"
 license = "MIT"
@@ -18,7 +18,7 @@ dependencies = [
     "shellingham>=1.5",
     "rich>=13.0.0",
     "pyyaml>=6.0.0",
-    "kaleido-sdk>=0.1.21,<0.2",
+    "kaleido-sdk>=0.1.23,<0.2",
 ]
 
 [project.scripts]

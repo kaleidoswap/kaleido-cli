@@ -142,7 +142,7 @@ wheels = [
 
 [[package]]
 name = "kaleido-cli"
-version = "0.1.1"
+version = "0.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "kaleido-sdk" },
@@ -168,7 +168,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "kaleido-sdk", specifier = ">=0.1.21,<0.2" },
+    { name = "kaleido-sdk", specifier = ">=0.1.23,<0.2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
     { name = "pytest-mock", marker = "extra == 'dev'", specifier = ">=3.15.1" },
@@ -188,16 +188,16 @@ dev = [
 
 [[package]]
 name = "kaleido-sdk"
-version = "0.1.21"
+version = "0.1.23"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic", extra = ["email"] },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/23/29/bc43ab342f946c9fc083cc36824082aec4b91e8ac16fa2eb0021a14aae4a/kaleido_sdk-0.1.21.tar.gz", hash = "sha256:b495a01e1723f30bbb39d09800213feefbe3a1bf8a3e16ebaddc14535164a31c", size = 117467, upload-time = "2026-10-06T15:33:37.452Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/03/11/3dbc9c4da52990e503fb58d23468ebda101504992eff649f58c537508df9/kaleido_sdk-0.1.23.tar.gz", hash = "sha256:dfd2091dd1a5ed005aa7d3004e1e260107af70927c795642610c8af4022f31f6", size = 110503, upload-time = "2026-10-08T08:17:12.551Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/99/e1/4f81a76c4c4b4b0805a4178dc490a9ee4fe420aeacfede9d486caa3137f8/kaleido_sdk-0.1.21-py3-none-any.whl", hash = "sha256:6c744f145373b39192852cc93bc33d15b992fa02e733c40504d9a75055574115", size = 45604, upload-time = "2026-10-06T15:33:36.416Z" },
+    { url = "https://files.pythonhosted.org/packages/be/19/7817d6fcc2ee826db907536189a5a739431c2dac5185674943ad1f0982f9/kaleido_sdk-0.1.23-py3-none-any.whl", hash = "sha256:eb47c51f1ad581d98bebc6763b8d09be5cdb7a20f931f1a31c7b4350265a21d1", size = 45601, upload-time = "2026-10-08T08:17:11.43Z" },
 ]
 
 [[package]]
