@@ -11,10 +11,6 @@ import typer
 
 from kaleido_cli.commands.node_swap import node_swap_app
 from kaleido_cli.config import (
-    DEFAULT_BITCOIND_RPC_HOST,
-    DEFAULT_BITCOIND_RPC_PASSWORD,
-    DEFAULT_BITCOIND_RPC_PORT,
-    DEFAULT_BITCOIND_RPC_USERNAME,
     DEFAULT_INDEXER_URL,
     DEFAULT_NETWORK,
     DEFAULT_PROXY_ENDPOINT,
@@ -650,19 +646,15 @@ async def _node_init(password: str, mnemonic: str | None) -> None:
         "[bold]Examples[/bold]\n\n"
         "  Simple unlock (choose signet, regtest, or custom services):\n"
         "  [cyan]kaleido node unlock[/cyan]\n\n"
-        "  Non-interactive signet defaults:\n"
+        "  Non-interactive signet defaults (chain followed through the indexer):\n"
         "  [cyan]kaleido --agent node unlock --password mysecret[/cyan]\n\n"
-        "  Sync from the indexer, without a bitcoind:\n"
-        "  [cyan]kaleido node unlock --chain-sync transaction \\\n"
-        "    --indexer-url electrum.example.com:50001[/cyan]\n\n"
-        "  Regtest defaults:\n"
-        "  [cyan]kaleido node unlock --bitcoind-user user --bitcoind-pass password \\\n"
+        "  Regtest, following the chain through bitcoind:\n"
+        "  [cyan]kaleido node unlock --chain-sync block \\\n"
+        "    --bitcoind-user user --bitcoind-pass password \\\n"
         "    --bitcoind-host regtest-bitcoind.rgbtools.org --bitcoind-port 80 \\\n"
         "    --indexer-url electrum.rgbtools.org:50041[/cyan]\n\n"
-        "  Override bitcoind credentials:\n"
-        "  [cyan]kaleido node unlock --bitcoind-user alice --bitcoind-pass hunter2[/cyan]\n\n"
-        "  Full custom override:\n"
-        "  [cyan]kaleido node unlock \\\n"
+        "  Full custom override with your own bitcoind:\n"
+        "  [cyan]kaleido node unlock --chain-sync block \\\n"
         "    --bitcoind-host 192.168.1.100 --bitcoind-port 18443 \\\n"
         "    --bitcoind-user alice --bitcoind-pass hunter2 \\\n"
         "    --indexer-url tcp://192.168.1.100:50001 \\\n"
@@ -685,29 +677,34 @@ def node_unlock(
         ChainSyncMode,
         typer.Option(
             "--chain-sync",
-            help="How LDK follows the chain: 'block' via bitcoind, 'transaction' via the indexer.",
+            help=(
+                "How LDK follows the chain: 'transaction' via the indexer (default), "
+                "'block' via your own bitcoind (needs the --bitcoind-* options)."
+            ),
         ),
-    ] = ChainSyncMode.BLOCK,
+    ] = ChainSyncMode.TRANSACTION,
     bitcoind_pass: Annotated[
-        str,
+        str | None,
         typer.Option(
             "--bitcoind-pass",
-            help="bitcoind RPC password. Ignored with --chain-sync transaction.",
+            help="bitcoind RPC password. Only with --chain-sync block.",
             hide_input=True,
         ),
-    ] = DEFAULT_BITCOIND_RPC_PASSWORD,
+    ] = None,
     bitcoind_user: Annotated[
-        str,
-        typer.Option("--bitcoind-user", help="bitcoind RPC username."),
-    ] = DEFAULT_BITCOIND_RPC_USERNAME,
+        str | None,
+        typer.Option(
+            "--bitcoind-user", help="bitcoind RPC username. Only with --chain-sync block."
+        ),
+    ] = None,
     bitcoind_host: Annotated[
-        str,
-        typer.Option("--bitcoind-host", help="bitcoind RPC host."),
-    ] = DEFAULT_BITCOIND_RPC_HOST,
+        str | None,
+        typer.Option("--bitcoind-host", help="bitcoind RPC host. Only with --chain-sync block."),
+    ] = None,
     bitcoind_port: Annotated[
-        int,
-        typer.Option("--bitcoind-port", help="bitcoind RPC port."),
-    ] = DEFAULT_BITCOIND_RPC_PORT,
+        int | None,
+        typer.Option("--bitcoind-port", help="bitcoind RPC port. Only with --chain-sync block."),
+    ] = None,
     indexer_url: Annotated[
         str,
         typer.Option(
@@ -740,15 +737,14 @@ def node_unlock(
 
     if is_interactive():
         profile = _prompt_unlock_service_profile()
-        chain_sync = _prompt_chain_sync_mode(chain_sync)
         if profile == "signet":
-            bitcoind_user = DEFAULT_BITCOIND_RPC_USERNAME
-            bitcoind_pass = DEFAULT_BITCOIND_RPC_PASSWORD
-            bitcoind_host = DEFAULT_BITCOIND_RPC_HOST
-            bitcoind_port = DEFAULT_BITCOIND_RPC_PORT
+            # The signet defaults have no public bitcoind: the node follows the
+            # chain through the Esplora indexer.
+            chain_sync = ChainSyncMode.TRANSACTION
             indexer_url = DEFAULT_INDEXER_URL
             proxy_endpoint = DEFAULT_PROXY_ENDPOINT
         elif profile == "regtest":
+            chain_sync = _prompt_chain_sync_mode(ChainSyncMode.BLOCK)
             bitcoind_user = DEFAULT_REGTEST_BITCOIND_RPC_USERNAME
             bitcoind_pass = DEFAULT_REGTEST_BITCOIND_RPC_PASSWORD
             bitcoind_host = DEFAULT_REGTEST_BITCOIND_RPC_HOST
@@ -756,6 +752,7 @@ def node_unlock(
             indexer_url = DEFAULT_REGTEST_INDEXER_URL
             proxy_endpoint = DEFAULT_REGTEST_PROXY_ENDPOINT
         else:
+            chain_sync = _prompt_chain_sync_mode(chain_sync)
             if chain_sync is ChainSyncMode.BLOCK:
                 bitcoind_user = typer.prompt("bitcoind RPC username", default=bitcoind_user)
                 bitcoind_pass = typer.prompt(
@@ -773,6 +770,23 @@ def node_unlock(
         raw = typer.prompt("[OPTIONAL] Lightning announce address (Enter to skip)", default="")
         if raw.strip():
             announce_address = [raw.strip()]
+
+    if chain_sync is ChainSyncMode.BLOCK:
+        missing = [
+            flag
+            for flag, value in (
+                ("--bitcoind-host", bitcoind_host),
+                ("--bitcoind-port", bitcoind_port),
+                ("--bitcoind-user", bitcoind_user),
+                ("--bitcoind-pass", bitcoind_pass),
+            )
+            if value in (None, "")
+        ]
+        if missing:
+            print_error(
+                "--chain-sync block needs your own bitcoind: set " + ", ".join(missing) + "."
+            )
+            raise typer.Exit(1)
 
     asyncio.run(
         _node_unlock(
@@ -793,10 +807,10 @@ def node_unlock(
 async def _node_unlock(
     password: str,
     chain_sync: ChainSyncMode,
-    bitcoind_user: str,
-    bitcoind_pass: str,
-    bitcoind_host: str,
-    bitcoind_port: int,
+    bitcoind_user: str | None,
+    bitcoind_pass: str | None,
+    bitcoind_host: str | None,
+    bitcoind_port: int | None,
     indexer_url: str,
     proxy_endpoint: str,
     announce_alias: str,
@@ -817,6 +831,13 @@ async def _node_unlock(
             config=LdkTransactionSyncConfig(indexer_url=indexer_url),
         )
     else:
+        if (
+            bitcoind_user is None
+            or bitcoind_pass is None
+            or bitcoind_host is None
+            or bitcoind_port is None
+        ):
+            raise ValueError("BlockSync needs the bitcoind RPC settings")
         ldk_chain_sync = LdkChainSyncBlockSync(
             mode="BlockSync",
             config=LdkBlockSyncConfig(

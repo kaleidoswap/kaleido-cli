@@ -4,10 +4,6 @@ from __future__ import annotations
 
 from kaleido_cli.app import app
 from kaleido_cli.config import (
-    DEFAULT_BITCOIND_RPC_HOST,
-    DEFAULT_BITCOIND_RPC_PASSWORD,
-    DEFAULT_BITCOIND_RPC_PORT,
-    DEFAULT_BITCOIND_RPC_USERNAME,
     DEFAULT_INDEXER_URL,
     DEFAULT_REGTEST_BITCOIND_RPC_HOST,
     DEFAULT_REGTEST_BITCOIND_RPC_PASSWORD,
@@ -29,16 +25,13 @@ def _block_sync_config(req):
 def test_node_unlock_interactive_signet_defaults(runner, mocker, mock_client):
     mocker.patch("kaleido_cli.commands.node.is_interactive", return_value=True)
 
-    result = runner.invoke(app, ["node", "unlock"], input="walletpw\ns\nb\n\n\n")
+    result = runner.invoke(app, ["node", "unlock"], input="walletpw\ns\n\n\n")
 
     assert result.exit_code == 0
     req = _unlock_request(mock_client)
     assert req.password == "walletpw"
-    config = _block_sync_config(req)
-    assert config.bitcoind_rpc_username == DEFAULT_BITCOIND_RPC_USERNAME
-    assert config.bitcoind_rpc_password == DEFAULT_BITCOIND_RPC_PASSWORD
-    assert config.bitcoind_rpc_host == DEFAULT_BITCOIND_RPC_HOST
-    assert config.bitcoind_rpc_port == DEFAULT_BITCOIND_RPC_PORT
+    assert req.ldk_chain_sync.mode == "TransactionSync"
+    assert req.ldk_chain_sync.config.indexer_url == DEFAULT_INDEXER_URL
     assert req.indexer_url == DEFAULT_INDEXER_URL
 
 
@@ -129,3 +122,36 @@ def test_node_unlock_non_interactive_transaction_sync(runner, mocker, mock_clien
     req = _unlock_request(mock_client)
     assert req.ldk_chain_sync.mode == "TransactionSync"
     assert req.ldk_chain_sync.config.indexer_url == "electrum.example.com:50001"
+
+
+def test_node_unlock_non_interactive_defaults_to_transaction_sync(runner, mocker, mock_client):
+    mocker.patch("kaleido_cli.commands.node.is_interactive", return_value=False)
+
+    result = runner.invoke(app, ["node", "unlock", "--password", "walletpw"])
+
+    assert result.exit_code == 0
+    req = _unlock_request(mock_client)
+    assert req.ldk_chain_sync.mode == "TransactionSync"
+    assert req.ldk_chain_sync.config.indexer_url == DEFAULT_INDEXER_URL
+
+
+def test_node_unlock_block_sync_requires_bitcoind(runner, mocker, mock_client):
+    mocker.patch("kaleido_cli.commands.node.is_interactive", return_value=False)
+
+    result = runner.invoke(
+        app,
+        [
+            "node",
+            "unlock",
+            "--password",
+            "walletpw",
+            "--chain-sync",
+            "block",
+            "--bitcoind-host",
+            "h",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "--bitcoind-port" in result.output
+    mock_client.rln.unlock_wallet.assert_not_awaited()
