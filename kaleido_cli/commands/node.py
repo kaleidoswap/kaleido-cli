@@ -831,6 +831,13 @@ async def _node_unlock(
             config=LdkTransactionSyncConfig(indexer_url=indexer_url),
         )
     else:
+        if (
+            bitcoind_user is None
+            or bitcoind_pass is None
+            or bitcoind_host is None
+            or bitcoind_port is None
+        ):
+            raise ValueError("BlockSync needs the bitcoind RPC settings")
         ldk_chain_sync = LdkChainSyncBlockSync(
             mode="BlockSync",
             config=LdkBlockSyncConfig(
