@@ -16,10 +16,6 @@ DEFAULT_NETWORK = "mutinynet"
 RLN_SIGNET_CUSTOM_NETWORK = "signetcustom"
 MUTINYNET_ALIASES = {"mutinynet", "signetcustom", "customsignet"}
 
-DEFAULT_BITCOIND_RPC_USERNAME = "user"
-DEFAULT_BITCOIND_RPC_PASSWORD = "default_password"
-DEFAULT_BITCOIND_RPC_HOST = "bitcoind.signet.kaleidoswap.com"
-DEFAULT_BITCOIND_RPC_PORT = 38332
 DEFAULT_INDEXER_URL = "https://esplora.signet.kaleidoswap.com"
 DEFAULT_PROXY_ENDPOINT = "rpcs://proxy.iriswallet.com/0.2/json-rpc"
 
